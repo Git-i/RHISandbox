@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34309.116
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RenderHardwareInterface", "RenderHardwareInterface\RenderHardwareInterface.vcxproj", "{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RHISandbox", "RHISandbox\RHISandbox.vcxproj", "{DEC0349E-0E85-4A8F-9D34-1397257F9135}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D} = {C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Debug-Vulkan|x64 = Debug-Vulkan|x64
+		Debug-Vulkan|x86 = Debug-Vulkan|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug|x64.ActiveCfg = Debug-Direct3D12|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug|x64.Build.0 = Debug-Direct3D12|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug|x86.ActiveCfg = Debug-Direct3D12|Win32
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug|x86.Build.0 = Debug-Direct3D12|Win32
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug-Vulkan|x64.ActiveCfg = Debug-Vulkan|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug-Vulkan|x64.Build.0 = Debug-Vulkan|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug-Vulkan|x86.ActiveCfg = Debug-Vulkan|Win32
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Debug-Vulkan|x86.Build.0 = Debug-Vulkan|Win32
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Release|x64.ActiveCfg = Release-Direct3D12|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Release|x64.Build.0 = Release-Direct3D12|x64
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Release|x86.ActiveCfg = Release-Direct3D12|Win32
+		{C6CF0B61-B7FF-4343-B0DA-9412FCF1219D}.Release|x86.Build.0 = Release-Direct3D12|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug|x64.ActiveCfg = Debug-Direct3D12|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug|x64.Build.0 = Debug-Direct3D12|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug|x86.ActiveCfg = Debug-Direct3D12|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug|x86.Build.0 = Debug-Direct3D12|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug-Vulkan|x64.ActiveCfg = Debug-Vulkan|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug-Vulkan|x64.Build.0 = Debug-Vulkan|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug-Vulkan|x86.ActiveCfg = Debug-Vulkan|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Debug-Vulkan|x86.Build.0 = Debug-Vulkan|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Release|x64.ActiveCfg = Release-Direct3D12|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Release|x64.Build.0 = Release-Direct3D12|x64
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Release|x86.ActiveCfg = Release-Direct3D12|Win32
+		{DEC0349E-0E85-4A8F-9D34-1397257F9135}.Release|x86.Build.0 = Release-Direct3D12|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {38D19A9C-DD2B-4FCE-B090-AE298E40A0BD}
+	EndGlobalSection
+EndGlobal

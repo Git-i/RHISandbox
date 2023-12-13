@@ -1,0 +1,1 @@
+#define DECL_STRUCT_CONSTRUCTORS(x) x(); x(Default_t); x(Zero_t);
