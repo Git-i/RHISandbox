@@ -13,3 +13,4 @@ namespace RHI
 		return 0;
 	}
 }
+

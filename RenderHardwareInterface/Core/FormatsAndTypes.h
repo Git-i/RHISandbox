@@ -177,6 +177,10 @@ namespace RHI
 	{
 		RTV, DSV, SRV_CBV_UAV, SAMPLER
 	};
+	enum class DescriptorType
+	{
+		CBV, RTV, DSV, SRV, UAV, Sampler
+	};
 
 	enum class ResourceLayout
 	{
@@ -215,9 +219,14 @@ namespace RHI
 	};
 	enum class BufferUsage
 	{
-		VertexBuffer,
-		ConstantBuffer
+		None = 0,
+		VertexBuffer = 1 << 0,
+		ConstantBuffer = 1 << 1,
+		IndexBuffer = 1 << 2,
+		CopySrc = 1 << 3,
+		CopyDst = 1 << 4
 	};
+	DEFINE_ENUM_FLAG_OPERATORS(BufferUsage);
 	enum class PipelineStage
 	{
 		TOP_OF_PIPE_BIT = 0x00000001,

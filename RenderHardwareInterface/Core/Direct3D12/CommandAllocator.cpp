@@ -4,7 +4,7 @@
 namespace RHI
 {
 	RESULT RHI::CommandAllocator::Reset()
-	{	
+	{
 		((ID3D12CommandAllocator*)ID)->Reset();
 		return 0;
 	}

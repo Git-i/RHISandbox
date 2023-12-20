@@ -1,10 +1,19 @@
-cbuffer buf :register(b1)
+cbuffer buf :register(b0)
 {
     float4x4 model;
-    float4x4 view;
-    float4x4 projection;
-    float4x4 _pad;
 };
+cbuffer buf2 :register(b1)
+{
+    float4x4 view;
+}
+cbuffer buf3 :register(b0, space1)
+{
+    float4x4 projection;
+};
+cbuffer buf2 :register(b1, space1)
+{
+    float4x4 _pad;
+}
 
 struct VS_OUT
 {

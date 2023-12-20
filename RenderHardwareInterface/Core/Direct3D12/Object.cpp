@@ -4,11 +4,13 @@
 namespace RHI {
 	int Object::Hold()
 	{
-		return ((ID3D12Object*)ID)->AddRef();
+		if (ID)return ((ID3D12Object*)ID)->AddRef();
+		else return 0;
 	}
 	int Object::Release()
 	{
-		return ((ID3D12Object*)ID)->Release();
+		if (ID) return ((ID3D12Object*)ID)->Release();
+		else return 0;
 	}
 	int Object::GetRefCount()
 	{

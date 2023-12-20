@@ -259,9 +259,9 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->RSSetViewports(numViewports, vp);
         return RESULT();
     }
-    RESULT GraphicsCommandList::Draw(uint32_t numVertices, uint32_t numInstances, uint32_t firstVertex, uint32_t firstIndex)
+    RESULT GraphicsCommandList::Draw(uint32_t numVertices, uint32_t numInstances, uint32_t firstVertex, uint32_t firstInstance)
     {
-        ((ID3D12GraphicsCommandList*)ID)->DrawInstanced(numVertices, numInstances, firstVertex, firstIndex);
+        ((ID3D12GraphicsCommandList*)ID)->DrawInstanced(numVertices, numInstances, firstVertex, firstInstance);
         return RESULT();
     }
     RESULT GraphicsCommandList::BindVertexBuffers(uint32_t startSlot, uint32_t numBuffers, Internal_ID* buffers)
@@ -275,6 +275,21 @@ namespace RHI
             views[0].StrideInBytes = strides[startSlot + i];
         }
         ((ID3D12GraphicsCommandList*)ID)->IASetVertexBuffers(startSlot, numBuffers, views);
+        return RESULT();
+    }
+    RESULT GraphicsCommandList::DrawIndexed(uint32_t IndexCount, uint32_t InstanceCount, uint32_t startIndexLocation, uint32_t startVertexLocation, uint32_t startInstanceLocation)
+    {
+        ((ID3D12GraphicsCommandList*)ID)->DrawIndexedInstanced(IndexCount, InstanceCount, startIndexLocation, startVertexLocation, startInstanceLocation);
+        return RESULT();
+    }
+    RESULT RHI::GraphicsCommandList::BindIndexBuffer(Buffer buffer, uint32_t offset)
+    {
+        D3D12_INDEX_BUFFER_VIEW view;
+        auto desc = ((ID3D12Resource*)buffer.ID)->GetDesc();
+        view.BufferLocation = ((ID3D12Resource*)buffer.ID)->GetGPUVirtualAddress() + offset;
+        view.Format = DXGI_FORMAT_R16_UINT;
+        view.SizeInBytes = desc.Width;
+        ((ID3D12GraphicsCommandList*)ID)->IASetIndexBuffer(&view);
         return RESULT();
     }
     RESULT GraphicsCommandList::SetRootSignature(RootSignature rs)
@@ -293,6 +308,11 @@ namespace RHI
     {
         ID3D12DescriptorHeap* heaps[] = { (ID3D12DescriptorHeap*)heap.ID};
         ((ID3D12GraphicsCommandList*)ID)->SetDescriptorHeaps(1, heaps);
+        return 0;
+    }
+    RESULT GraphicsCommandList::CopyBufferRegion(uint32_t srcOffset, uint32_t dstOffset, uint32_t size, Buffer srcBuffer, Buffer dstBuffer)
+    {
+        ((ID3D12GraphicsCommandList*)ID)->CopyBufferRegion((ID3D12Resource*)dstBuffer.ID, dstOffset, (ID3D12Resource*)srcBuffer.ID, srcOffset, size);
         return 0;
     }
 }

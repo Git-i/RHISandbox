@@ -63,6 +63,31 @@ namespace RHI
         
         return VK_SUCCESS;
     }
+    static VkBufferUsageFlags VkBufferUsage(RHI::BufferUsage usage)
+    {
+        VkBufferUsageFlags flags = 0;
+        if ((usage & RHI::BufferUsage::VertexBuffer) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        }
+        if ((usage & RHI::BufferUsage::ConstantBuffer) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        }
+        if ((usage & RHI::BufferUsage::IndexBuffer) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        }
+        if ((usage & RHI::BufferUsage::CopySrc) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        }
+        if ((usage & RHI::BufferUsage::CopyDst) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+        return flags;
+    }
     RESULT Device::Create(PhysicalDevice PhysicalDevice, CommandQueueDesc const* commandQueueInfos, int numCommandQueues, CommandQueue* commandQueues, Device* device)
     {
         VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice.ID;
@@ -117,6 +142,7 @@ namespace RHI
             queueInfos.push_back(info);
         }
         VkPhysicalDeviceFeatures deviceFeatures{};
+        deviceFeatures.shaderStorageImageReadWithoutFormat = VK_TRUE;
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
         dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
         dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
@@ -147,7 +173,8 @@ namespace RHI
             VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
             VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
             VK_KHR_MAINTENANCE1_EXTENSION_NAME,
-            VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME
+            VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+            VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME
         };
         info.enabledExtensionCount = ARRAYSIZE(ext_name);
         info.ppEnabledExtensionNames = ext_name;
@@ -201,9 +228,27 @@ namespace RHI
         pCommandList->m_allocator = allocator.ID;
         return 0;
     }
+    VkDescriptorType DescType(RHI::DescriptorType type)
+    {
+        switch (type)
+        {
+        case RHI::DescriptorType::CBV: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            break;
+        case RHI::DescriptorType::RTV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+            break;
+        case RHI::DescriptorType::DSV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+            break;
+        case RHI::DescriptorType::SRV: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            break;
+        case RHI::DescriptorType::UAV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+            break;
+        default:
+            break;
+        }
+    }
     RESULT Device::CreateDescriptorHeap(DescriptorHeapDesc* desc, DescriptorHeap* descriptorHeap)
     {
-        if (desc->poolSizes->type == DescriptorHeapType::RTV || desc->poolSizes->type == DescriptorHeapType::DSV)
+        if (desc->poolSizes->type == DescriptorType::RTV || desc->poolSizes->type == DescriptorType::DSV)
         {
             descriptorHeap->ID = new VkImageView[desc->poolSizes->numDescriptors];
         }
@@ -212,7 +257,7 @@ namespace RHI
             VkDescriptorPoolSize poolSize[5]{};
             for (uint32_t i = 0; i < desc->numPoolSizes; i++)
             {
-                poolSize[i].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                poolSize[i].type = DescType(desc->poolSizes[i].type);
                 poolSize[i].descriptorCount = desc->poolSizes[i].numDescriptors;
             }
 
@@ -285,7 +330,7 @@ namespace RHI
         info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         info.size = desc->size;
-        info.usage = desc->usage == BufferUsage::VertexBuffer ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        info.usage = VkBufferUsage(desc->usage);
         buffer->offset = offset;
         buffer->size = desc->size;
         buffer->Device_ID = ID;
@@ -325,11 +370,14 @@ namespace RHI
             uint32_t iterator = 0;
             for (auto& prop : HeapProps)
             {
-                bool valid = true;
-                if (prop.memoryLevel != desc->props.memoryLevel) valid = false;
-                if (prop.pageProperty != desc->props.pageProperty) valid = false;
-                if (valid) MemIndex = iterator;
-                iterator++;
+                if (prop.memoryLevel != desc->props.memoryLevel) { iterator++; continue; }
+                if (prop.pageProperty != CPUPageProperty::NonVisible && desc->props.pageProperty == CPUPageProperty::Any)
+                {
+                    MemIndex = iterator;
+                    iterator++;
+                    continue;
+                }
+                if (prop.pageProperty != desc->props.pageProperty) {iterator++; continue;}
             }
             if (MemIndex == UINT32_MAX)
             {
@@ -348,26 +396,29 @@ namespace RHI
         allocInfo.memoryTypeIndex = MemIndex;
         return vkAllocateMemory((VkDevice)ID, &allocInfo, nullptr, (VkDeviceMemory*)&heap->ID);
     }
-    RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature* rootSignature, _Out_ DescriptorSetLayout* pSetLayouts)
+    
+    RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature* rootSignature, DescriptorSetLayout* pSetLayouts)
     {
         VkDescriptorSetLayout descriptorSetLayout[5];
         //VkPushConstantRange pushConstantRanges[5];
         VkDescriptorSetLayoutCreateInfo layoutInfo[5]{};
+        uint32_t numLayouts = 0;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
         {
             VkDescriptorSetLayoutBinding LayoutBinding[5] = {};
             for (uint32_t j = 0; j < desc->rootParameters[i].descriptorTable.numDescriptorRanges; j++)
             {
-                LayoutBinding[i].binding = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
-                LayoutBinding[i].descriptorCount = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
-                LayoutBinding[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                LayoutBinding[i].pImmutableSamplers = nullptr;
-                LayoutBinding[i].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+                LayoutBinding[j].binding = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
+                LayoutBinding[j].descriptorCount = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
+                LayoutBinding[j].descriptorType = DescType(desc->rootParameters[i].descriptorTable.ranges[j].type);
+                LayoutBinding[j].pImmutableSamplers = nullptr;
+                LayoutBinding[j].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+                numLayouts++;
             }
             layoutInfo[i].bindingCount = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
             layoutInfo[i].pBindings = LayoutBinding;
             layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            vkCreateDescriptorSetLayout((VkDevice)ID, layoutInfo, nullptr, &descriptorSetLayout[i]);
+            vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
         }
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -551,24 +602,125 @@ namespace RHI
             pSets[i].ID = descriptorSets[i];
         return RESULT();
     }
-    RESULT Device::UpdateDescriptorSets(std::uint32_t numDescriptorSets, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
+    RESULT Device::UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
     {
         VkWriteDescriptorSet writes[5]{};
-        for(uint32_t i = 0; i < numDescriptorSets; i++)
+        VkDescriptorBufferInfo Binfo[5]{ };
+        VkDescriptorImageInfo Iinfo[5]{ };
+        VkImageView view[5]{};
+        for(uint32_t i = 0; i < numDescs; i++)
         {
-            VkDescriptorBufferInfo info{};
-            info.buffer = (VkBuffer)desc[i].bufferInfos->buffer.ID;
-            info.offset = desc[i].bufferInfos->offset;
-            info.range = desc[i].bufferInfos->range;
+            if (desc[i].type == RHI::DescriptorType::CBV)
+            {
+                Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer.ID;
+                Binfo[i].offset = desc[i].bufferInfos->offset;
+                Binfo[i].range = desc[i].bufferInfos->range;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                writes[i].pBufferInfo = &Binfo[i];
+            }
+            if (desc[i].type == RHI::DescriptorType::SRV)
+            {
+                VkImageViewCreateInfo info{};
+                info.viewType = VK_IMAGE_VIEW_TYPE_2D; //todo
+                info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                info.image = (VkImage)desc[i].textureInfos->texture.ID;
+                info.format = VK_FORMAT_R8G8B8A8_UNORM;
+                info.components = { VK_COMPONENT_SWIZZLE_IDENTITY };
+                info.subresourceRange.levelCount = 1;
+                info.subresourceRange.layerCount = 1;
+                info.subresourceRange.baseMipLevel = 0;
+                info.subresourceRange.baseArrayLayer = 0;
+                vkCreateImageView((VkDevice)ID, &info, nullptr, &view[i]);
+                Iinfo[i].imageView = view[i];
+                Iinfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                Iinfo[i].sampler = nullptr;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                writes[i].pImageInfo = &Iinfo[i];
+            }
             writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writes[i].dstSet = (VkDescriptorSet)sets[i].ID;
-            writes[i].dstBinding = desc->binding;
+            writes[i].dstSet = (VkDescriptorSet)sets->ID;
+            writes[i].dstBinding = desc[i].binding;
             writes[i].dstArrayElement = 0;
-            writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             writes[i].descriptorCount = desc->numDescriptors;
-            writes[i].pBufferInfo = &info;
         }
-        vkUpdateDescriptorSets((VkDevice)ID, numDescriptorSets, writes, 0, nullptr);
+        vkUpdateDescriptorSets((VkDevice)ID, numDescs, writes, 0, nullptr);
+        for (int i  = 0; i < 5; i++)
+        {
+            if (view[i]);
+               // vkDestroyImageView((VkDevice)ID, view[i], nullptr);
+        }
+        return RESULT();
+    }
+    VkImageType ImageType(TextureType type)
+    {
+        if (type == TextureType::Texture1D) return VK_IMAGE_TYPE_1D;
+        if (type == TextureType::Texture2D) return VK_IMAGE_TYPE_2D;
+        if (type == TextureType::Texture3D) return VK_IMAGE_TYPE_3D;
+    }
+    VkImageTiling ImageTiling(TextureTilingMode mode)
+    {
+        if (mode == TextureTilingMode::Linear) return VK_IMAGE_TILING_LINEAR;
+        if (mode == TextureTilingMode::Optimal) return VK_IMAGE_TILING_OPTIMAL;
+    }
+    VkImageUsageFlags ImageUsage(RHI::TextureUsage usage)
+    {
+        VkImageUsageFlags flags = 0;
+        if ((usage & RHI::TextureUsage::SampledImage) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        if ((usage & RHI::TextureUsage::CopyDst) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if ((usage & RHI::TextureUsage::ColorAttachment) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if ((usage & RHI::TextureUsage::DepthStencilAttachment) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        return flags;
+    }
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture* texture, Heap* heap, std::uint64_t offset, ResourceType type)
+    {
+        VkImageCreateInfo info{};
+        info.arrayLayers = desc->type == TextureType::Texture3D ? 1 : desc->depthOrArraySize;
+        info.extent.width = desc->width;
+        info.extent.height = desc->height;
+        info.extent.depth = desc->type == TextureType::Texture3D ? desc->depthOrArraySize : 1;
+        info.flags = 0;
+        info.format = FormatConv(desc->format);
+        info.imageType = ImageType(desc->type);
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        info.mipLevels = desc->mipLevels;
+        info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        info.tiling = ImageTiling(desc->mode);
+        info.usage = ImageUsage(desc->usage);
+        info.samples = VK_SAMPLE_COUNT_1_BIT;
+        vkCreateImage((VkDevice)ID, &info, nullptr, (VkImage*)&texture->ID);
+        vkBindImageMemory((VkDevice)ID, (VkImage)texture->ID, (VkDeviceMemory)heap->ID, offset);
+        return RESULT();
+    }
+    RESULT Device::GetTextureMemoryRequirements(TextureDesc* desc, MemoryReqirements* requirements)
+    {
+        VkImageCreateInfo info{};
+        info.arrayLayers = desc->type == TextureType::Texture3D ? 1 : desc->depthOrArraySize;
+        info.extent.width = desc->width;
+        info.extent.height = desc->height;
+        info.extent.depth = desc->type == TextureType::Texture3D ? desc->depthOrArraySize : 1;
+        info.flags = 0;
+        info.format = FormatConv(desc->format);
+        info.imageType = ImageType(desc->type);
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        info.mipLevels = desc->mipLevels;
+        info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        info.tiling = ImageTiling(desc->mode);
+        info.usage = ImageUsage(desc->usage);
+        info.samples = VK_SAMPLE_COUNT_1_BIT;
+        VkDeviceImageMemoryRequirements DeviceReq{};
+        DeviceReq.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
+        DeviceReq.pCreateInfo = &info;
+        VkMemoryRequirements2 req{};
+        req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+        vkGetDeviceImageMemoryRequirementsKHR((VkDevice)ID, &DeviceReq, &req);
+        requirements->alignment = req.memoryRequirements.alignment;
+        requirements->size = req.memoryRequirements.size;
+        requirements->memoryTypeBits = req.memoryRequirements.memoryTypeBits;
         return RESULT();
     }
 }

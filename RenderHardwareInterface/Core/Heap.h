@@ -18,6 +18,7 @@ namespace RHI
 		WriteCombined = 0,
 		WriteCached = 1,
 		WriteBack = 1,
+		Any = 3,
 		NonVisible = 2
 	};
 	enum class MemoryLevel

@@ -5,12 +5,13 @@ namespace RHI
 {
 	class RHI_API RootSignature : public Object
 	{
-
+		
 	};
 	struct DescriptorRange
 	{
 		std::uint32_t numDescriptors;
 		std::uint32_t BaseShaderRegister;
+		DescriptorType type;
 	};
 	struct DescriptorTable
 	{

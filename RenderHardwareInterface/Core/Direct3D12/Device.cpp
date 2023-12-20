@@ -76,7 +76,7 @@ namespace RHI
         for (UINT i = 0; i < desc->numPoolSizes; i++)
             dsDesc.NumDescriptors += desc->poolSizes[i].numDescriptors;
         dsDesc.NodeMask = 0;
-        dsDesc.Flags = desc->poolSizes->type == DescriptorHeapType::RTV || desc->poolSizes->type == DescriptorHeapType::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        dsDesc.Flags = desc->poolSizes->type == DescriptorType::RTV || desc->poolSizes->type == DescriptorType::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dsDesc.Type = D3D12DescriptorHeapType(desc->poolSizes->type);
         return ((ID3D12Device*)ID)->CreateDescriptorHeap(&dsDesc, IID_PPV_ARGS(((ID3D12DescriptorHeap**)&descriptorHeap->ID)));
     }
@@ -84,21 +84,24 @@ namespace RHI
     {
         D3D12_CPU_DESCRIPTOR_HANDLE handle = ((ID3D12DescriptorHeap*)heap.ID)->GetCPUDescriptorHandleForHeapStart();
         D3D12_GPU_DESCRIPTOR_HANDLE ghandle = ((ID3D12DescriptorHeap*)heap.ID)->GetGPUDescriptorHandleForHeapStart();
+        SIZE_T offset = 0;
+        
         for (UINT i = 0; i < numDescriptorSets; i++)
         {
-            pSets[i].start.val = handle.ptr + ((layouts[i].binding) * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
-            pSets[i].gpu_handle = ghandle.ptr + ((layouts[i].binding) * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
+            pSets[i].start.val = handle.ptr + offset;
+            pSets[i].gpu_handle = ghandle.ptr + offset;
+            offset += layouts[i].numDescriptors * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         }
         return 0;
     }
-    RESULT Device::UpdateDescriptorSets(std::uint32_t numDescriptorSets, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
+    RESULT Device::UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
     {
-        for (UINT i = 0; i < numDescriptorSets; i++)
+        for (UINT i = 0; i < numDescs; i++)
         {
             D3D12_CPU_DESCRIPTOR_HANDLE handle;
-            handle.ptr = sets[i].start.val;
+            handle.ptr = sets[0].start.val + (desc[i].binding * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
             D3D12_CONSTANT_BUFFER_VIEW_DESC cbdesc;
-            cbdesc.BufferLocation = ((ID3D12Resource*)desc[i].bufferInfos->buffer.ID)->GetGPUVirtualAddress() + desc[i].bufferInfos->offset;
+            cbdesc.BufferLocation = ((ID3D12Resource*)desc[i].bufferInfos->buffer.ID)->GetGPUVirtualAddress() + (desc[i].bufferInfos->offset);
             cbdesc.SizeInBytes = desc[i].bufferInfos->range;
             ((ID3D12Device*)ID)->CreateConstantBufferView(&cbdesc, handle);
         }
@@ -198,7 +201,7 @@ namespace RHI
         bd.Format = DXGI_FORMAT_UNKNOWN;
         bd.MipLevels = 1;
         bd.DepthOrArraySize = 1;
-        bd.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+        bd.Alignment = 0;// D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
         bd.Height = 1;
         bd.SampleDesc.Count = 1;
         bd.SampleDesc.Quality = 0;
@@ -236,39 +239,57 @@ namespace RHI
         hd.SizeInBytes = desc->size;
         hd.Properties.CreationNodeMask = hd.Properties.VisibleNodeMask = 0;
         hd.Flags = D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES;
-        if (desc->props.memoryLevel == MemoryLevel::DedicatedRAM) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
-        if (desc->props.memoryLevel == MemoryLevel::SharedRAM) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L1;
-        if (desc->props.memoryLevel == MemoryLevel::Unknown) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        if (desc->props.pageProperty == CPUPageProperty::WriteCombined) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
-        if (desc->props.pageProperty == CPUPageProperty::WriteBack) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-        if (desc->props.pageProperty == CPUPageProperty::NonVisible) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+        if (desc->props.type == HeapType::Custom)
+        {
+            hd.Properties.Type = D3D12_HEAP_TYPE_CUSTOM;
+            if (desc->props.memoryLevel == MemoryLevel::DedicatedRAM) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+            if (desc->props.memoryLevel == MemoryLevel::SharedRAM) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L1;
+            if (desc->props.memoryLevel == MemoryLevel::Unknown) hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            if (desc->props.pageProperty == CPUPageProperty::WriteCombined) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            if (desc->props.pageProperty == CPUPageProperty::WriteBack) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+            if (desc->props.pageProperty == CPUPageProperty::Any) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            if (desc->props.pageProperty == CPUPageProperty::NonVisible) hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+        }
+        else
+        {
+            hd.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            hd.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        }
         if (desc->props.type == HeapType::Default) hd.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
         if (desc->props.type == HeapType::Readback) hd.Properties.Type = D3D12_HEAP_TYPE_READBACK;
         if (desc->props.type == HeapType::Upload) hd.Properties.Type = D3D12_HEAP_TYPE_UPLOAD;
-        if (desc->props.type == HeapType::Custom) hd.Properties.Type = D3D12_HEAP_TYPE_CUSTOM;
-        return ((ID3D12Device*)ID)->CreateHeap(&hd, IID_PPV_ARGS((ID3D12Heap**)&heap->ID));
+        if (((ID3D12Device*)ID)->CreateHeap(&hd, IID_PPV_ARGS((ID3D12Heap**)&heap->ID)) != 0)
+        {
+            if (desc->props.FallbackType == HeapType::Default)  hd.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+            if (desc->props.FallbackType == HeapType::Readback) hd.Properties.Type = D3D12_HEAP_TYPE_READBACK;
+            if (desc->props.FallbackType == HeapType::Upload)   hd.Properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+            return ((ID3D12Device*)ID)->CreateHeap(&hd, IID_PPV_ARGS((ID3D12Heap**)&heap->ID));
+        }
+        return 0;
     }
     RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature* rootSignature,_Out_ DescriptorSetLayout* pSetLayouts)
     {
         D3D12_ROOT_PARAMETER params[5]{};
         D3D12_ROOT_SIGNATURE_DESC rsDesc;
+        D3D12_DESCRIPTOR_RANGE range[20];
+        UINT rangeIndex = 0;
         for (UINT i = 0; i < desc->numRootParameters; i++)
         {
             params[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             params[i].DescriptorTable.NumDescriptorRanges = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
-            D3D12_DESCRIPTOR_RANGE range[5];
+            pSetLayouts[i].numBindings = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
+            pSetLayouts[i].numDescriptors = 0;
+            params[i].DescriptorTable.pDescriptorRanges = &range[rangeIndex];
             for (UINT j = 0; j < desc->rootParameters[i].descriptorTable.numDescriptorRanges; j++)
             {
-                range[j].BaseShaderRegister = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
-                range[j].RegisterSpace = 0U;
-                range[j].NumDescriptors = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
-                range[j].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                range[j].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-                pSetLayouts[i].binding = j;
-                pSetLayouts[i].numDescriptors = range[j].NumDescriptors;
-                pSetLayouts[i].type = DescriptorHeapType::SRV_CBV_UAV;
+                range[rangeIndex].BaseShaderRegister = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
+                range[rangeIndex].RegisterSpace = i;
+                range[rangeIndex].NumDescriptors = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
+                range[rangeIndex].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+                range[rangeIndex].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                pSetLayouts[i].numDescriptors += range[j].NumDescriptors;
+                rangeIndex++;
             }
-            params[i].DescriptorTable.pDescriptorRanges = range;
             params[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         }
         rsDesc = CD3DX12_ROOT_SIGNATURE_DESC(desc->numRootParameters, params, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);

@@ -2,6 +2,7 @@
 #include "Object.h"
 #include "Buffer.h"
 #include "FormatsAndTypes.h"
+#include "Texture.h"
 namespace RHI
 {
 	class RHI_API DescriptorHeap : public Object
@@ -12,9 +13,8 @@ namespace RHI
 	class RHI_API DescriptorSetLayout : public Object
 	{
 		friend class Device;
-		DescriptorHeapType type;
+		std::uint32_t numBindings;
 		std::uint32_t numDescriptors;
-		std::uint32_t binding;
 	};
 	class RHI_API DescriptorSet : public Object
 	{
@@ -23,22 +23,27 @@ namespace RHI
 		CPU_HANDLE start;
 		std::uint64_t gpu_handle;
 	};
-
 	struct DescriptorBufferInfo
 	{
 		Buffer buffer;
 		std::uint32_t offset;
 		std::uint32_t range;
 	};
+	enum class ShaderResourceViewDimension
+	{
+		Texture1D, Texture1DArray, Texture2D, Texture2DArray, Texture3D, Texture3DArray
+	};
 	struct DescriptorTextureInfo
 	{
+		ShaderResourceViewDimension dimension;
+		Texture texture;
 	};
 	struct RHI_API DescriptorSetUpdateDesc
 	{
 		std::uint32_t binding;
 		std::uint32_t arrayIndex;
 		std::uint32_t numDescriptors;
-		DescriptorHeapType type;
+		DescriptorType type;
 		union
 		{
 			DescriptorBufferInfo* bufferInfos;
@@ -47,7 +52,7 @@ namespace RHI
 	};
 	struct RHI_API PoolSize
 	{
-		DescriptorHeapType type;
+		DescriptorType type;
 		std::uint32_t numDescriptors;
 	};
 	struct RHI_API DescriptorHeapDesc
