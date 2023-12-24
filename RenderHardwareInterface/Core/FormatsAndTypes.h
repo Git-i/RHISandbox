@@ -159,6 +159,20 @@ namespace RHI
 	{
 		float r, g, b, a;
 	};
+	struct DepthStencilValue
+	{
+		float depth;
+		std::uint8_t stecnil;
+	};
+	struct ClearValue
+	{
+		Format format;
+		union
+		{
+			Color clearColor;
+			DepthStencilValue depthStencilValue;
+		};
+	};
 	enum class CommandListType
 	{
 		Direct,
@@ -181,7 +195,6 @@ namespace RHI
 	{
 		CBV, RTV, DSV, SRV, UAV, Sampler
 	};
-
 	enum class ResourceLayout
 	{
 		UNDEFINED = 0,

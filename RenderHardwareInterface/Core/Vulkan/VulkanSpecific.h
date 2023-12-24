@@ -4,6 +4,8 @@
 #include "../Surface.h"
 #include "volk.h"
 #include <vector>
+#include "../Object.h"
+#include "../Buffer.h"
 namespace RHI
 {
     enum QueueFamilyIndicesFlags
@@ -31,4 +33,15 @@ namespace RHI
     VkPrimitiveTopology vkPrimitiveTopology(PrimitiveTopology topology);
     extern PFN_vkSetPrivateDataEXT SetPrivateData;
     extern PFN_vkGetPrivateDataEXT GetPrivateData;
+
+    class vResource
+    {
+    public:
+        std::uint64_t offset;
+        std::uint64_t size;
+        Internal_ID heap;
+    };
+    class vBuffer : public Buffer, public vResource
+    {
+    };
 }

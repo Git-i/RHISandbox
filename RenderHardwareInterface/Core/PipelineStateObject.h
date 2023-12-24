@@ -8,9 +8,9 @@ namespace RHI
 {
 	class RHI_API PipelineStateObject : public Object
 	{
-		friend class Device;
-		friend class GraphicsCommandList;
-		std::vector<std::uint32_t> strides;
+	protected:
+		DECL_CLASS_CONSTRUCTORS(PipelineStateObject);
+		
 	};
 	enum class InputRate
 	{
@@ -43,7 +43,11 @@ namespace RHI
 		std::uint32_t numInputBindings;
 		InputElementDesc* inputElements;
 		InputBindingDesc* inputBindings;
-		RootSignature rootSig;
+		RootSignature* rootSig;
 		PrimitiveTopology topology;
+		bool DepthEnabled;
+		std::uint32_t DepthWriteMask;
+		std::uint32_t DepthReadMask;
+		Format DSVFormat;
 	};
 }

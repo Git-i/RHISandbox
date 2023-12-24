@@ -17,14 +17,8 @@ typedef unsigned int RESULT;
 
 #include <cstdint>
 
-#ifdef RHI_VULKAN
-	#define DESTROY_FN virtual void Destroy() override;
-	#define VK_NO_PROTOTYPES
-#else
-	#define DESTROY_FN
-#endif // RHI_VULKAN
+
 
 #define DECL_STRUCT_CONSTRUCTORS(x) x(); x(Default_t); x(Zero_t);
-#include "Core/DeviceFormatSizes.h"
-
+#define DECL_CLASS_CONSTRUCTORS(x) x() = default;x(const x&) = default;x(x&&) = default;
 

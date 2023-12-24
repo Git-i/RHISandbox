@@ -72,12 +72,6 @@
     <ClInclude Include="Core\Barrier.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\DeviceFormatSizes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Core\BurnerTypes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Core\Direct3D12\D3D12Specific.h">
       <Filter>Header Files</Filter>
     </ClInclude>

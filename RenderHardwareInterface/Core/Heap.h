@@ -4,7 +4,8 @@ namespace RHI
 {
 	class RHI_API Heap : public Object
 	{
-		
+	protected:
+		DECL_CLASS_CONSTRUCTORS(Heap);
 	};
 	enum class HeapType
 	{

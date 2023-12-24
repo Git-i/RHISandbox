@@ -5,6 +5,8 @@ namespace RHI
 {
 	class RHI_API  Texture : public Object
 	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(Texture);
 	public:
 	};
 
@@ -42,9 +44,14 @@ namespace RHI
 		std::uint32_t mipLevels;
 		std::uint32_t sampleCount;
 		TextureTilingMode mode;
+		ClearValue* optimizedClearValue = nullptr;
 		TextureUsage usage;
 	};
 	struct RHI_API RenderTargetViewDesc
+	{
+
+	};
+	struct RHI_API DepthStencilViewDesc
 	{
 
 	};

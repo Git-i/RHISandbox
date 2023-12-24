@@ -5,13 +5,14 @@
 #include "Device.h"
 namespace RHI
 {
-	class RHI_API Instance
+	class RHI_API Instance : public Object
 	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(Instance);
 	public:
-		static RESULT Create(Instance* instance);
-		RESULT GetPhysicalDevice(int id, PhysicalDevice* device);
-		RESULT CreateSwapChain(SwapChainDesc* desc, PhysicalDevice device, Device pDevice, CommandQueue pCommandQueue, SwapChain* pSwapChain);
-		Internal_ID ID;
+		static RESULT Create(Instance** instance);
+		RESULT GetPhysicalDevice(int id, PhysicalDevice** device);
+		RESULT CreateSwapChain(SwapChainDesc* desc, PhysicalDevice* device, Device* pDevice, CommandQueue* pCommandQueue, SwapChain** pSwapChain);
 	};
 
 }

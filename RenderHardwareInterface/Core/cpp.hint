@@ -1,1 +1,2 @@
 #define DECL_STRUCT_CONSTRUCTORS(x) x(); x(Default_t); x(Zero_t);
+#define DECL_CLASS_CONSTRUCTORS(x) x() = delete;(const x&) = delete;(x&&) = delete;

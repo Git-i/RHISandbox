@@ -9,7 +9,11 @@ namespace RHI {
 	}
 	int Object::Release()
 	{
-		if (ID) return ((ID3D12Object*)ID)->Release();
+		if (ID)
+		{
+			int refCnt = ((ID3D12Object*)ID)->Release();
+			//if (!refCnt) operator delete((void*)this);
+		}
 		else return 0;
 	}
 	int Object::GetRefCount()

@@ -214,13 +214,11 @@
   <ItemGroup>
     <ClInclude Include="Core\Barrier.h" />
     <ClInclude Include="Core\Buffer.h" />
-    <ClInclude Include="Core\BurnerTypes.h" />
     <ClInclude Include="Core\CommandList.h" />
     <ClInclude Include="Core\CommandQueue.h" />
     <ClInclude Include="Core\DescriptorHeap.h" />
     <ClInclude Include="Core\Device.h" />
     <ClInclude Include="Core\CommandAllocator.h" />
-    <ClInclude Include="Core\DeviceFormatSizes.h" />
     <ClInclude Include="Core\Direct3D12\D3D12Specific.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug-Vulkan|x64'">true</ExcludedFromBuild>
     </ClInclude>

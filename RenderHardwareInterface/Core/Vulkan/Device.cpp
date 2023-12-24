@@ -271,13 +271,13 @@ namespace RHI
         }
         return 0;
     }
-    RESULT Device::CreateRenderTargetView(Texture texture, RenderTargetViewDesc* desc, CPU_HANDLE heapHandle)
+    RESULT Device::CreateRenderTargetView(Texture* texture, RenderTargetViewDesc* desc, CPU_HANDLE heapHandle)
     {
         VkImageViewCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         info.pNext = NULL;
         info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        info.image = (VkImage)texture.ID;
+        info.image = (VkImage)texture->ID;
         info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -291,11 +291,11 @@ namespace RHI
        return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
         
     }
-    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorHeapType type)
+    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
     {
         return sizeof(VkImageView);
     }
-    RESULT Device::GetSwapChainImage(SwapChain swapchain, std::uint32_t index, Texture* texture)
+    RESULT Device::GetSwapChainImage(SwapChain swapchain, std::uint32_t index, Texture** texture)
     {
         std::uint32_t img = index + 1;
         std::vector<VkImage> images(img);
@@ -584,7 +584,7 @@ namespace RHI
             vkDestroyShaderModule((VkDevice)ID, modules[i], nullptr);
         return RESULT();
     }
-    RESULT Device::CreateDescriptorSets(DescriptorHeap heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet* pSets)
+    RESULT Device::CreateDescriptorSets(DescriptorHeap* heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet* pSets)
     {
         VkDescriptorSetLayout vklayouts[5];
         for (uint32_t i = 0; i < numDescriptorSets; i++)
@@ -593,7 +593,7 @@ namespace RHI
         }
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = (VkDescriptorPool)heap.ID;
+        allocInfo.descriptorPool = (VkDescriptorPool)heap->ID;
         allocInfo.descriptorSetCount = numDescriptorSets;
         allocInfo.pSetLayouts = vklayouts;
         VkDescriptorSet descriptorSets[5];
@@ -676,7 +676,7 @@ namespace RHI
             flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         return flags;
     }
-    RESULT Device::CreateTexture(TextureDesc* desc, Texture* texture, Heap* heap, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, std::uint64_t offset, ResourceType type)
     {
         VkImageCreateInfo info{};
         info.arrayLayers = desc->type == TextureType::Texture3D ? 1 : desc->depthOrArraySize;

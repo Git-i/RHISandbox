@@ -8,7 +8,4 @@ namespace RHI
 		((ID3D12CommandAllocator*)ID)->Reset();
 		return 0;
 	}
-	CommandAllocator::~CommandAllocator()
-	{
-	}
 }

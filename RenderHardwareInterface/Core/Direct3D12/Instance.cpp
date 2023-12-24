@@ -3,25 +3,31 @@
 #include "Core.h"
 #include <dxgi1_6.h>
 #include "include\d3d12.h"
+#include "D3D12Specific.h"
 #pragma comment(lib, "dxgi.lib")
 namespace RHI
 {
-	RESULT Instance::Create(Instance* instance)
+	RESULT Instance::Create(Instance** instance)
 	{
+		D3D12Instance* d3d12instance = new D3D12Instance;
 		ID3D12Debug5* pDebug;
 	
 		D3D12GetDebugInterface(IID_PPV_ARGS(&pDebug));
 		pDebug->EnableDebugLayer();
 		pDebug->SetEnableGPUBasedValidation(true);
-
-		return CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(((IDXGIFactory**)&instance->ID)));
+		
+		CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(((IDXGIFactory**)&d3d12instance->ID)));
+		*instance = d3d12instance;
+		return 0;
 	}
-	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice* device)
+	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice** device)
 	{
-		return ((IDXGIFactory*)ID)->EnumAdapters(id, (IDXGIAdapter**)&device->ID);
+		*device = new PhysicalDevice;
+		return ((IDXGIFactory*)ID)->EnumAdapters(id, (IDXGIAdapter**)&(*device)->ID);
 	}
-	RESULT Instance::CreateSwapChain(SwapChainDesc* desc,PhysicalDevice, Device pDevice, CommandQueue pCommandQueue, SwapChain* pSwapChaim)
+	RESULT Instance::CreateSwapChain(SwapChainDesc* desc,PhysicalDevice*, Device* pDevice, CommandQueue* pCommandQueue, SwapChain** pSwapChaim)
 	{	
+		*pSwapChaim = new SwapChain; //todo
 		DXGI_SWAP_CHAIN_DESC dxgi_desc;
 		dxgi_desc.BufferCount = desc->BufferCount;
 		dxgi_desc.BufferDesc.Width = desc->Width;
@@ -37,6 +43,6 @@ namespace RHI
 		dxgi_desc.Windowed = desc->Windowed;
 		dxgi_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		dxgi_desc.BufferDesc.Format = (DXGI_FORMAT)desc->SwapChainFormat;
-		return ((IDXGIFactory*)ID)->CreateSwapChain((IUnknown*)pCommandQueue.ID, &dxgi_desc, (IDXGISwapChain**)&pSwapChaim->ID);
+		return ((IDXGIFactory*)ID)->CreateSwapChain((IUnknown*)pCommandQueue->ID, &dxgi_desc, (IDXGISwapChain**)&(*pSwapChaim)->ID);
 	}
 }

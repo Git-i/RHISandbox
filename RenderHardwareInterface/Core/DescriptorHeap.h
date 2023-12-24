@@ -7,25 +7,25 @@ namespace RHI
 {
 	class RHI_API DescriptorHeap : public Object
 	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(DescriptorHeap);
 	public:
 		CPU_HANDLE GetCpuHandle();
 	};
 	class RHI_API DescriptorSetLayout : public Object
 	{
-		friend class Device;
-		std::uint32_t numBindings;
-		std::uint32_t numDescriptors;
+	protected:
+		DECL_CLASS_CONSTRUCTORS(DescriptorSetLayout);
+		
 	};
 	class RHI_API DescriptorSet : public Object
 	{
-		friend class Device;
-		friend class GraphicsCommandList;
-		CPU_HANDLE start;
-		std::uint64_t gpu_handle;
+	protected:
+		DECL_CLASS_CONSTRUCTORS(DescriptorSet);
 	};
 	struct DescriptorBufferInfo
 	{
-		Buffer buffer;
+		Buffer* buffer;
 		std::uint32_t offset;
 		std::uint32_t range;
 	};
@@ -36,7 +36,7 @@ namespace RHI
 	struct DescriptorTextureInfo
 	{
 		ShaderResourceViewDimension dimension;
-		Texture texture;
+		Texture* texture;
 	};
 	struct RHI_API DescriptorSetUpdateDesc
 	{

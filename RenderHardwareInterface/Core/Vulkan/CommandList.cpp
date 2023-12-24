@@ -112,9 +112,9 @@ namespace RHI
         color_attachment_info.clearValue = {desc->clearColor.r, desc->clearColor.g, desc->clearColor.b, desc->clearColor.a};
         return *((RenderingAttachmentDescStorage*)(&color_attachment_info));
     }
-    RESULT GraphicsCommandList::SetPipelineState(PipelineStateObject& pso)
+    RESULT GraphicsCommandList::SetPipelineState(PipelineStateObject* pso)
     {
-        vkCmdBindPipeline((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)pso.ID);
+        vkCmdBindPipeline((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)pso->ID);
         return 0;
     }
     RESULT GraphicsCommandList::SetScissorRects(uint32_t numRects, Area2D* rects)
@@ -154,7 +154,7 @@ namespace RHI
         vkCmdBindVertexBuffers((VkCommandBuffer)ID, startSlot, numBuffers, (VkBuffer*)buffers, &l);
         return RESULT();
     }
-    RESULT GraphicsCommandList::SetRootSignature(RootSignature rs)
+    RESULT GraphicsCommandList::SetRootSignature(RootSignature* rs)
     {
         return RESULT();
     }
@@ -188,7 +188,7 @@ namespace RHI
         vkCmdCopyBuffer((VkCommandBuffer)ID, (VkBuffer)srcBuffer.ID, (VkBuffer)dstBuffer.ID, 1, &copy);
         return RESULT();
     }
-    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer buffer, Texture texture)
+    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture texture)
     {
         VkBufferImageCopy copy{};
         copy.bufferImageHeight = srcHeight;

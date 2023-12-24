@@ -1,15 +1,18 @@
 #include "pch.h"
+#include "VulkanSpecific.h"
 #include "../Buffer.h"
 #include "volk.h"
 namespace RHI
 {
-	RESULT Resource::Map(void** data)
+	RESULT Buffer::Map(void** data)
 	{
-		return vkMapMemory((VkDevice)Device_ID, (VkDeviceMemory)heap, offset, size, 0, data);
+		auto vbuffer = (vBuffer*)this;
+		return vkMapMemory((VkDevice)Device_ID, (VkDeviceMemory)vbuffer->heap, vbuffer->offset, vbuffer->size, 0, data);
 	}
-	RESULT Resource::UnMap()
+	RESULT Buffer::UnMap()
 	{
-		vkUnmapMemory((VkDevice)Device_ID, (VkDeviceMemory)heap);
+		auto vbuffer = (vBuffer*)this;
+		vkUnmapMemory((VkDevice)Device_ID, (VkDeviceMemory)vbuffer->heap);
 		return 0;
 	}
 }

@@ -5,7 +5,8 @@ namespace RHI
 {
 	class RHI_API RootSignature : public Object
 	{
-		
+	protected:
+		DECL_CLASS_CONSTRUCTORS(RootSignature);
 	};
 	struct DescriptorRange
 	{

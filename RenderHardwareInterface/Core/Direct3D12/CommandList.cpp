@@ -1,10 +1,43 @@
 #include "pch.h"
 #include "../CommandList.h"
 #include "include/d3d12.h"
+#include "include\d3dx12\d3dx12.h"
 #include "D3D12Specific.h"
 namespace RHI
 {
     static std::uint32_t* strides;
+    D3D12_TEXTURE_BARRIER RHI_API ConvertToDeviceFormat(TextureMemoryBarrier* desc)
+    {
+        D3D12_TEXTURE_BARRIER barr = {};
+        barr.AccessBefore = D3DAcessMode(desc->AccessFlagsBefore);
+        barr.AccessAfter = D3DAcessMode(desc->AccessFlagsAfter);
+        barr.LayoutBefore = D3DBarrierLayout(desc->oldLayout);
+        barr.LayoutAfter = D3DBarrierLayout(desc->newLayout);
+        barr.pResource = (ID3D12Resource*)desc->texture->ID;
+        D3D12_BARRIER_SUBRESOURCE_RANGE range;
+        range.FirstArraySlice = desc->subresourceRange.FirstArraySlice;
+        range.NumPlanes = 1;
+        range.IndexOrFirstMipLevel = desc->subresourceRange.IndexOrFirstMipLevel;
+        range.NumMipLevels = desc->subresourceRange.NumMipLevels;
+        range.NumArraySlices = desc->subresourceRange.NumArraySlices;
+        UINT firstPlane = 0;
+        UINT numPlanes = 0;
+        if ((UINT)desc->subresourceRange.imageAspect & (UINT)RHI::Aspect::STENCIL_BIT)
+        {
+            firstPlane = 1;
+        }
+        if ((UINT)desc->subresourceRange.imageAspect & (UINT)RHI::Aspect::PLANE_1_BIT)
+        {
+            firstPlane = 1;
+        }
+        if ((UINT)desc->subresourceRange.imageAspect & (UINT)RHI::Aspect::PLANE_2_BIT)
+        {
+            firstPlane = 2;
+        }
+        range.FirstPlane = firstPlane;
+
+        return barr;
+    }
     D3D12_BARRIER_ACCESS D3DAcessMode(ResourceAcessFlags flags)
     {
         switch (flags)
@@ -139,44 +172,45 @@ namespace RHI
             break;
         }
     }
-    RESULT GraphicsCommandList::Begin(CommandAllocator allocator)
+    RESULT GraphicsCommandList::Begin(CommandAllocator* allocator)
     {
-        return ((ID3D12GraphicsCommandList*)ID)->Reset((ID3D12CommandAllocator*)allocator.ID, nullptr);
+        return ((ID3D12GraphicsCommandList*)ID)->Reset((ID3D12CommandAllocator*)allocator->ID, nullptr);
     }
-    RESULT GraphicsCommandList::PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers, BufferMemoryBarrierStorage* bufferBarriersStorage, std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers,TextureMemoryBarrierStorage* imageBarriersStorage)
+    RESULT GraphicsCommandList::PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers, std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers)
     {
         D3D12_BARRIER_GROUP group[2];
         UINT numBarriers = 0;
+        D3D12_BUFFER_BARRIER Bbarr[5]{};
+        D3D12_TEXTURE_BARRIER Tbarr[5]{};
         for (int i = 0; i < numBufferBarriers; i++)
         {
-            D3D12_BUFFER_BARRIER barr;
-            auto mem = ConvertToDeviceFormat(&pbufferBarriers[i]);
-            barr = *(D3D12_BUFFER_BARRIER*)&mem;
-            barr.SyncBefore = D3DBarrierSync(syncBefore);
-            barr.SyncAfter = D3DBarrierSync(syncAfter);
-            ((D3D12_BUFFER_BARRIER*)bufferBarriersStorage)[i] = barr;
+            //barr.AccessBefore = D3DAcessMode(pbufferBarriers[i].AccessFlagsBefore);
+            //barr.AccessAfter = D3DAcessMode(desc->AccessFlagsAfter);
+            //barr.LayoutBefore = D3DBarrierLayout(desc->oldLayout);
+            //barr.LayoutAfter = D3DBarrierLayout(desc->newLayout);
+            //auto mem = ConvertToDeviceFormat(&pbufferBarriers[i]);
+            //barr = *(D3D12_BUFFER_BARRIER*)&mem;
+            Bbarr[i].SyncBefore = D3DBarrierSync(syncBefore);
+            Bbarr[i].SyncAfter = D3DBarrierSync(syncAfter);
         }
-        if (bufferBarriersStorage)
+        if (numBufferBarriers)
         {
             group[0].NumBarriers = numBufferBarriers;
             group[0].Type = D3D12_BARRIER_TYPE_BUFFER;
-            group[0].pBufferBarriers = (D3D12_BUFFER_BARRIER*)bufferBarriersStorage;
+            group[0].pBufferBarriers = Bbarr;
             numBarriers++;
         }
         for (int i = 0; i < numImageBarriers; i++)
         {
-            D3D12_TEXTURE_BARRIER barr;
-            auto mem = ConvertToDeviceFormat(&pImageBarriers[i]);
-            barr = *(D3D12_TEXTURE_BARRIER*)&mem;
-            barr.SyncBefore = D3DBarrierSync(syncBefore);
-            barr.SyncAfter = D3DBarrierSync(syncAfter);
-            ((D3D12_TEXTURE_BARRIER*)imageBarriersStorage)[i] = barr;
+            Tbarr[i] = ConvertToDeviceFormat(&pImageBarriers[i]);
+            Tbarr[i].SyncBefore = D3DBarrierSync(syncBefore);
+            Tbarr[i].SyncAfter = D3DBarrierSync(syncAfter);
         }
-        if (imageBarriersStorage)
+        if (numImageBarriers)
         {
             group[numBarriers].NumBarriers = numImageBarriers;
             group[numBarriers].Type = D3D12_BARRIER_TYPE_TEXTURE;
-            group[numBarriers].pTextureBarriers = (D3D12_TEXTURE_BARRIER*)imageBarriersStorage;
+            group[numBarriers].pTextureBarriers = Tbarr;
             numBarriers++;
         }
         ((ID3D12GraphicsCommandList7*)ID)->Barrier(numBarriers, group);
@@ -190,23 +224,24 @@ namespace RHI
         rect.top = desc->renderingArea.offset.y;
         rect.bottom = rect.top + desc->renderingArea.size.y;
         ((ID3D12GraphicsCommandList*)ID)->RSSetScissorRects(1, &rect);
+        D3D12_CPU_DESCRIPTOR_HANDLE handle[5];
         for (int i = 0; i < desc->numColorAttachments; i++)
         {
             if (desc->pColorAttachments[i].loadOp == LoadOp::Clear)
             {
                 ((ID3D12GraphicsCommandList*)ID)->ClearRenderTargetView({ desc->pColorAttachments[i].ImageView.val }, (float*)&desc->pColorAttachments[i].clearColor, 1, &rect);
             }
-            desc->pColorAttachmentsMem[i] = ConvertToDeviceFormat(&desc->pColorAttachments[i]);
+            handle[i].ptr = desc->pColorAttachments[i].ImageView.val;
         }
         if (desc->pDepthStencilAttachment)
         {
-            ((ID3D12GraphicsCommandList*)ID)->ClearDepthStencilView({ desc->pDepthStencilAttachment->ImageView.val }, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.f, 0, 1, &rect);
-            RenderingAttachmentDescStorage depthStencil = ConvertToDeviceFormat(desc->pDepthStencilAttachment);
-            ((ID3D12GraphicsCommandList*)ID)->OMSetRenderTargets(desc->numColorAttachments, (D3D12_CPU_DESCRIPTOR_HANDLE*)desc->pColorAttachmentsMem, 0, (D3D12_CPU_DESCRIPTOR_HANDLE*)&depthStencil);
+            D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = { desc->pDepthStencilAttachment->ImageView.val };
+            ((ID3D12GraphicsCommandList*)ID)->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.f, 0, 1, & rect);
+            ((ID3D12GraphicsCommandList*)ID)->OMSetRenderTargets(desc->numColorAttachments, handle, 0, &dsvHandle);
         }
         else
         {
-            ((ID3D12GraphicsCommandList*)ID)->OMSetRenderTargets(desc->numColorAttachments, (D3D12_CPU_DESCRIPTOR_HANDLE*)desc->pColorAttachmentsMem, 0, 0);
+            ((ID3D12GraphicsCommandList*)ID)->OMSetRenderTargets(desc->numColorAttachments, handle, 0, 0);
         }
         return RESULT();
     }
@@ -218,17 +253,11 @@ namespace RHI
     {
         return ((ID3D12GraphicsCommandList*)ID)->Close();
     }
-    RenderingAttachmentDescStorage RHI_API ConvertToDeviceFormat(const RenderingAttachmentDesc* desc)
+    RESULT GraphicsCommandList::SetPipelineState(PipelineStateObject* pso)
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE handle;
-        handle.ptr = desc->ImageView.val;
-        return *((RenderingAttachmentDescStorage*)(&handle));
-    }
-    RESULT GraphicsCommandList::SetPipelineState(PipelineStateObject& pso)
-    {
-        ((ID3D12GraphicsCommandList*)ID)->SetPipelineState((ID3D12PipelineState*)pso.ID);
+        ((ID3D12GraphicsCommandList*)ID)->SetPipelineState((ID3D12PipelineState*)pso->ID);
         ((ID3D12GraphicsCommandList*)ID)->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        strides = pso.strides.data();
+        strides = ((D3D12PipelineStateObject*)pso)->strides.data();
         return 0;
     }
     RESULT GraphicsCommandList::SetScissorRects(uint32_t numRects, Area2D* rects)
@@ -282,37 +311,69 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->DrawIndexedInstanced(IndexCount, InstanceCount, startIndexLocation, startVertexLocation, startInstanceLocation);
         return RESULT();
     }
-    RESULT RHI::GraphicsCommandList::BindIndexBuffer(Buffer buffer, uint32_t offset)
+    RESULT RHI::GraphicsCommandList::BindIndexBuffer(Buffer* buffer, uint32_t offset)
     {
         D3D12_INDEX_BUFFER_VIEW view;
-        auto desc = ((ID3D12Resource*)buffer.ID)->GetDesc();
-        view.BufferLocation = ((ID3D12Resource*)buffer.ID)->GetGPUVirtualAddress() + offset;
-        view.Format = DXGI_FORMAT_R16_UINT;
+        auto desc = ((ID3D12Resource*)buffer->ID)->GetDesc();
+        view.BufferLocation = ((ID3D12Resource*)buffer->ID)->GetGPUVirtualAddress() + offset;
+        view.Format = DXGI_FORMAT_R16_UINT; //todo
         view.SizeInBytes = desc.Width;
         ((ID3D12GraphicsCommandList*)ID)->IASetIndexBuffer(&view);
         return RESULT();
     }
-    RESULT GraphicsCommandList::SetRootSignature(RootSignature rs)
+    RESULT GraphicsCommandList::SetRootSignature(RootSignature* rs)
     {
-        ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootSignature((ID3D12RootSignature*)rs.ID);
+        ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootSignature((ID3D12RootSignature*)rs->ID);
         return RESULT();
     }
-    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature rs, DescriptorSet set, std::uint32_t rootParamIndex)
+    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
     {
         D3D12_GPU_DESCRIPTOR_HANDLE handle;
-        handle.ptr = set.gpu_handle;
+        handle.ptr = ((D3D12DescriptorSet*)set)->gpu_handle;
         ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootDescriptorTable(rootParamIndex, handle);
         return RESULT();
     }
-    RESULT GraphicsCommandList::SetDescriptorHeap(DescriptorHeap heap)
+    RESULT GraphicsCommandList::SetDescriptorHeap(DescriptorHeap* heap)
     {
-        ID3D12DescriptorHeap* heaps[] = { (ID3D12DescriptorHeap*)heap.ID};
+        ID3D12DescriptorHeap* heaps[] = { (ID3D12DescriptorHeap*)heap->ID };
         ((ID3D12GraphicsCommandList*)ID)->SetDescriptorHeaps(1, heaps);
         return 0;
     }
-    RESULT GraphicsCommandList::CopyBufferRegion(uint32_t srcOffset, uint32_t dstOffset, uint32_t size, Buffer srcBuffer, Buffer dstBuffer)
+    RESULT GraphicsCommandList::CopyBufferRegion(uint32_t srcOffset, uint32_t dstOffset, uint32_t size, Buffer* srcBuffer, Buffer* dstBuffer)
     {
-        ((ID3D12GraphicsCommandList*)ID)->CopyBufferRegion((ID3D12Resource*)dstBuffer.ID, dstOffset, (ID3D12Resource*)srcBuffer.ID, srcOffset, size);
+        ((ID3D12GraphicsCommandList*)ID)->CopyBufferRegion((ID3D12Resource*)dstBuffer->ID, dstOffset, (ID3D12Resource*)srcBuffer->ID, srcOffset, size);
+        return 0;
+    }
+    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
+    {
+        D3D12_TEXTURE_COPY_LOCATION pSrcCopy;
+        ID3D12Device* device;
+        ((ID3D12Resource*)texture->ID)->GetDevice(IID_PPV_ARGS(&device));
+        auto desc = ((ID3D12Resource*)buffer->ID)->GetDesc();
+        UINT numRows;
+        UINT64 rowSize;
+        UINT64 totalSize;
+        device->GetCopyableFootprints(&desc, 0, 1, srcOffset, &pSrcCopy.PlacedFootprint,&numRows, &rowSize, &totalSize);
+        pSrcCopy.pResource = (ID3D12Resource*)buffer->ID;
+        pSrcCopy.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        desc = ((ID3D12Resource*)texture->ID)->GetDesc();
+        D3D12_TEXTURE_COPY_LOCATION pDstCopy;
+        pDstCopy.pResource = (ID3D12Resource*)texture->ID;
+        pDstCopy.SubresourceIndex = D3D12CalcSubresource(dstRange.IndexOrFirstMipLevel, dstRange.FirstArraySlice, 0, desc.MipLevels, desc.DepthOrArraySize);//todo
+        pDstCopy.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        pSrcCopy.PlacedFootprint.Footprint.Format = desc.Format;
+        D3D12_BOX size;
+        size.left = 0;
+        size.right = imgSize.width;
+        size.top = 0;
+        size.bottom = imgSize.height;
+        size.front = 0;
+        size.back = imgSize.depth;
+        pSrcCopy.PlacedFootprint.Footprint.Width = imgSize.width;
+        pSrcCopy.PlacedFootprint.Footprint.Height = imgSize.height;
+        pSrcCopy.PlacedFootprint.Footprint.Depth = imgSize.depth;
+        pSrcCopy.PlacedFootprint.Footprint.RowPitch = 4 * imgSize.width;
+        ((ID3D12GraphicsCommandList*)ID)->CopyTextureRegion(&pDstCopy, imgOffset.width,imgOffset.height, imgOffset.depth, &pSrcCopy, &size);
         return 0;
     }
 }

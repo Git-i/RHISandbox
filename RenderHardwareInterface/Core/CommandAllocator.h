@@ -6,10 +6,10 @@ namespace RHI
 {
 	class RHI_API CommandAllocator : public Object
 	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(CommandAllocator);
 	public:
 		RESULT Reset();
-		~CommandAllocator();
-		DESTROY_FN;
 	};
 	
 }

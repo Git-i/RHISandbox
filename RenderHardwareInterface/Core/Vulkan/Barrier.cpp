@@ -12,13 +12,5 @@ namespace RHI
 	RHI::TextureMemoryBarrier::TextureMemoryBarrier(Zero_t)
 	{
 	}
-	TextureMemoryBarrierStorage RHI_API ConvertToDeviceFormat(TextureMemoryBarrier* desc)
-	{
-		return {};
-	}
-	BufferMemoryBarrierStorage RHI_API ConvertToDeviceFormat(BufferMemoryBarrier* desc)
-	{
-		return BufferMemoryBarrierStorage();
-	}
 	
 }

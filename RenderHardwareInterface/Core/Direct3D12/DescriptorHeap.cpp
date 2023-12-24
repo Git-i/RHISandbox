@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "../DescriptorHeap.h"
 #include <d3d12.h>
+#include "D3D12Specific.h"
 namespace RHI
 {
 	CPU_HANDLE RHI::DescriptorHeap::GetCpuHandle()

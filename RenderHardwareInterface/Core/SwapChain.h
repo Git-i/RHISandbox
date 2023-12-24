@@ -10,7 +10,6 @@ namespace RHI
 	{
 	public:
 		RESULT Present(std::uint32_t imgIndex);
-		DESTROY_FN;
 		Internal_ID present_semaphore;
 		Internal_ID PresentQueue_ID;
 	};
