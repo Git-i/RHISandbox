@@ -3,10 +3,6 @@
 #include "volk.h"
 namespace RHI
 {
-	void Fence::Destroy()
-	{
-
-	}
 	void Fence::Wait(std::uint64_t val)
 	{
 		std::uint64_t curr_val;

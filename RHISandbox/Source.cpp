@@ -96,8 +96,8 @@ void InitializeRHI(RHI::Instance** inst, RHI::PhysicalDevice** phys_device, RHI:
 	sDesc.SwapChainFormat = RHI::Format::B8G8R8A8_UNORM;
 
 	(*inst)->CreateSwapChain(&sDesc, *phys_device, *device, *queue, swapChain);
-	(*device)->GetSwapChainImage(**swapChain, 0, &backBufferImages[0]);
-	(*device)->GetSwapChainImage(**swapChain, 1, &backBufferImages[1]);
+	(*device)->GetSwapChainImage(*swapChain, 0, &backBufferImages[0]);
+	(*device)->GetSwapChainImage(*swapChain, 1, &backBufferImages[1]);
 
 	RHI::PoolSize pSize;
 	pSize.numDescriptors = 2;
@@ -122,7 +122,9 @@ void InitializeRHI(RHI::Instance** inst, RHI::PhysicalDevice** phys_device, RHI:
 	depthTexture.usage = RHI::TextureUsage::DepthStencilAttachment;
 	depthTexture.width = 1280;
 	depthTexture.optimizedClearValue = &depthVal;
-	(*device)->CreateTexture(&depthTexture, depthBufferImage, nullptr, 0, RHI::ResourceType::Commited);
+	RHI::HeapProperties props;
+	props.type = RHI::HeapType::Default;
+	(*device)->CreateTexture(&depthTexture, depthBufferImage, nullptr,&props, 0, RHI::ResourceType::Commited);
 	pSize.type = RHI::DescriptorType::DSV;
 	pSize.numDescriptors = 1;
 	(*device)->CreateDescriptorHeap(&rtvHeapHesc, dsvHeap);
@@ -284,7 +286,7 @@ int main()
 	CBHeapDesc.size = ConstantbufferMemRequirements.size;
 	device->CreateHeap(&CBHeapDesc, &cbheap, nullptr);
 
-	device->CreateBuffer(&stagingBufferDesc, &StagingBuffer, StagingHeap, 0, RHI::ResourceType::Placed);
+	device->CreateBuffer(&stagingBufferDesc, &StagingBuffer, StagingHeap, nullptr, 0, RHI::ResourceType::Placed);
 
 	RHI::HeapDesc heapDesc;
 	heapDesc.props.type = RHI::HeapType::Default;
@@ -292,12 +294,12 @@ int main()
 	device->CreateHeap(&heapDesc, &heap, &fallback);
 		
 	uint32_t offset = 0;
-	device->CreateBuffer(&bufferDesc, &VertexBuffer, heap, offset, RHI::ResourceType::Placed);
+	device->CreateBuffer(&bufferDesc, &VertexBuffer, heap, nullptr, offset, RHI::ResourceType::Placed);
 	offset = (((bufferDesc.size + offset) / ConstantbufferMemRequirements.alignment) + 1)* ConstantbufferMemRequirements.alignment;
-	device->CreateBuffer(&IndexBufferDesc, &IndexBuffer, heap, offset, RHI::ResourceType::Placed);
-	device->CreateBuffer(&ConstantbufferDesc, &ConstantBuffer, cbheap, 0, RHI::ResourceType::Placed);
+	device->CreateBuffer(&IndexBufferDesc, &IndexBuffer, heap,nullptr,  offset, RHI::ResourceType::Placed);
+	device->CreateBuffer(&ConstantbufferDesc, &ConstantBuffer, cbheap, nullptr, 0, RHI::ResourceType::Placed);
 	offset = (((IndexBufferDesc.size + offset) / textureMemRequirements.alignment) + 1) * textureMemRequirements.alignment;
-	device->CreateTexture(&textureDesc, &texture, heap, offset, RHI::ResourceType::Placed);
+	device->CreateTexture(&textureDesc, &texture, heap, nullptr, offset, RHI::ResourceType::Placed);
 	
 	void* data = nullptr;
 

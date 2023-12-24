@@ -6,6 +6,13 @@
 #include <vector>
 #include "../Object.h"
 #include "../Buffer.h"
+#include "../CommandAllocator.h"
+#include "../CommandList.h"
+#include "../CommandQueue.h"
+#include "../Device.h"
+#include "../DescriptorHeap.h"
+#include "../Fence.h"
+#include "../Instance.h"
 namespace RHI
 {
     enum QueueFamilyIndicesFlags
@@ -26,7 +33,7 @@ namespace RHI
         QueueFamilyIndicesFlags flags;
     };
 
-    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice device, RHI::Surface surface = RHI::Surface());
+    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface = RHI::Surface());
 
 
     VkFormat FormatConv(RHI::Format format);
@@ -43,5 +50,74 @@ namespace RHI
     };
     class vBuffer : public Buffer, public vResource
     {
+    };
+    class vCommandAllocator : public CommandAllocator
+    {
+
+    };
+    class vDevice : public Device
+    {
+    public:
+        std::vector<HeapProperties> HeapProps;
+        std::uint32_t DefaultHeapIndex = UINT32_MAX;
+        std::uint32_t UploadHeapIndex = UINT32_MAX;
+        std::uint32_t ReadbackHeapIndex = UINT32_MAX;
+        VkPrivateDataSlot slot;
+        QueueFamilyIndices indices;
+    };
+    class vCommandQueue : public CommandQueue
+    {
+
+    };
+    class vGraphicsCommandList : public GraphicsCommandList
+    {
+    public:
+        Internal_ID m_allocator;
+    };
+    class vDescriptorHeap : public DescriptorHeap
+    {
+
+    };
+    class vFence : public Fence
+    {
+
+    };
+    class vHeap : public Heap
+    {
+
+    };
+    class vDescriptorSetLayout : public DescriptorSetLayout
+    {
+
+    };
+    class vRootSignature : public RootSignature
+    {
+
+    };
+    class vPipelineStateObject : public PipelineStateObject
+    {
+
+    };
+    class vDescriptorSet : public DescriptorSet
+    {
+
+    };
+    class vTexture : public Texture, public vResource
+    {
+
+    };
+    class vInstance : public Instance
+    {
+
+    };
+    class vPhysicalDevice : public PhysicalDevice
+    {
+
+    };
+    class vSwapChain : public SwapChain
+    {
+    public:
+        VkSemaphore present_semaphore;
+        VkQueue PresentQueue_ID;
     };
 }

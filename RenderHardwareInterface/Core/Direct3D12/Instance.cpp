@@ -27,7 +27,7 @@ namespace RHI
 	}
 	RESULT Instance::CreateSwapChain(SwapChainDesc* desc,PhysicalDevice*, Device* pDevice, CommandQueue* pCommandQueue, SwapChain** pSwapChaim)
 	{	
-		*pSwapChaim = new SwapChain; //todo
+		*pSwapChaim = new D3D12SwapChain;
 		DXGI_SWAP_CHAIN_DESC dxgi_desc;
 		dxgi_desc.BufferCount = desc->BufferCount;
 		dxgi_desc.BufferDesc.Width = desc->Width;

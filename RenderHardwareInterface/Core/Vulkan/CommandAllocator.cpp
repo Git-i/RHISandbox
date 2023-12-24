@@ -7,11 +7,4 @@ namespace RHI
 	{	
 		return vkResetCommandPool((VkDevice)Device_ID, (VkCommandPool)ID, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 	}
-	CommandAllocator::~CommandAllocator()
-	{
-	}
-	void CommandAllocator::Destroy()
-	{
-		vkDestroyCommandPool((VkDevice)Device_ID, (VkCommandPool)ID, nullptr);
-	}
 }

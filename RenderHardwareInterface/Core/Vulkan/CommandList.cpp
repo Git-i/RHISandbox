@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "../CommandList.h"
 #include "volk.h"
-#include <atlalloc.h>
+#include "VulkanSpecific.h"
 namespace RHI
 {
     static VkAttachmentLoadOp VulkanLoadOp(LoadOp op)
@@ -23,22 +23,19 @@ namespace RHI
         default: return VK_ATTACHMENT_STORE_OP_MAX_ENUM;
         }
     }
-    void CommandList::Destroy()
-    {
-    }
-    RESULT GraphicsCommandList::Begin(CommandAllocator allocator)
+    RESULT GraphicsCommandList::Begin(CommandAllocator* allocator)
     {
         VkCommandBufferBeginInfo bufferBeginInfo = {};
         bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
         VkCommandBufferAllocateInfo Info = {};
         Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        Info.commandPool = (VkCommandPool)allocator.ID;
+        Info.commandPool = (VkCommandPool)allocator->ID;
         Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         Info.commandBufferCount = 1;
-        vkFreeCommandBuffers((VkDevice)Device_ID, (VkCommandPool)m_allocator, 1, (VkCommandBuffer*)&ID);
+        vkFreeCommandBuffers((VkDevice)Device_ID, (VkCommandPool)(((vGraphicsCommandList*)this)->m_allocator), 1, (VkCommandBuffer*)&ID);
         vkAllocateCommandBuffers((VkDevice)Device_ID, &Info, (VkCommandBuffer*)&ID);
-        m_allocator = allocator.ID;
+        ((vGraphicsCommandList*)this)->m_allocator = allocator->ID;
         return vkBeginCommandBuffer((VkCommandBuffer)ID, &bufferBeginInfo);
     }
     RESULT GraphicsCommandList::PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* bufferBarrier,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers)
@@ -51,7 +48,7 @@ namespace RHI
         for (uint32_t i = 0; i < numImageBarriers; i++)
         {
             ImageBarr[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            ImageBarr[i].image = (VkImage)pImageBarriers[i].texture.ID;
+            ImageBarr[i].image = (VkImage)pImageBarriers[i].texture->ID;
             ImageBarr[i].newLayout = (VkImageLayout)pImageBarriers[i].newLayout;
             ImageBarr[i].oldLayout = (VkImageLayout)pImageBarriers[i].oldLayout;
             ImageBarr[i].srcAccessMask = (VkAccessFlags)pImageBarriers[i].AccessFlagsBefore;
@@ -69,21 +66,59 @@ namespace RHI
         vkCmdPipelineBarrier((VkCommandBuffer)ID, (VkFlags)syncBefore, (VkFlags)syncAfter, 0, 0, nullptr, numBufferBarriers, (VkBufferMemoryBarrier*)BufferBarr, numImageBarriers, (VkImageMemoryBarrier*)ImageBarr);
         return RESULT();
     }
+    VkAttachmentLoadOp vloadOp(LoadOp op)
+    {
+        switch (op)
+        {
+        case RHI::LoadOp::Load: return VK_ATTACHMENT_LOAD_OP_LOAD;
+            break;
+        case RHI::LoadOp::Clear: return VK_ATTACHMENT_LOAD_OP_CLEAR;
+            break;
+        case RHI::LoadOp::DontCare: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            break;
+        default:
+            break;
+        }
+    }
+    VkAttachmentStoreOp vStoreOp(StoreOp op)
+    {
+        switch (op)
+        {
+        case RHI::StoreOp::Store: return VK_ATTACHMENT_STORE_OP_STORE;
+            break;
+        case RHI::StoreOp::DontCare: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            break;
+        default:
+            break;
+        }
+    }
     RESULT GraphicsCommandList::BeginRendering(const RenderingBeginDesc* desc)
     {
+        VkRenderingAttachmentInfo Attachmentinfos[5] = {};
         for (int i = 0; i < desc->numColorAttachments; i++)
         {
-            desc->pColorAttachmentsMem[i] = ConvertToDeviceFormat(&desc->pColorAttachments[i]);
+            Attachmentinfos[i].clearValue.color = *(VkClearColorValue*)&desc->pColorAttachments[i].clearColor;
+            Attachmentinfos[i].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            Attachmentinfos[i].imageView = *(VkImageView*)desc->pColorAttachments[i].ImageView.ptr;
+            Attachmentinfos[i].loadOp = vloadOp(desc->pColorAttachments[i].loadOp);
+            Attachmentinfos[i].storeOp = vStoreOp(desc->pColorAttachments[i].storeOp);
+            Attachmentinfos[i].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         }
         VkRect2D render_area;
         render_area.offset = { desc->renderingArea.offset.x,desc->renderingArea.offset.y };
         render_area.extent = { desc->renderingArea.size.x,desc->renderingArea.size.y };
         VkRenderingInfo info = {};
-        info.pColorAttachments = (VkRenderingAttachmentInfo*)desc->pColorAttachmentsMem;
+        info.pColorAttachments = Attachmentinfos;
+        VkRenderingAttachmentInfo depthAttach{};
         if (desc->pDepthStencilAttachment)
         {
-            RenderingAttachmentDescStorage depthAttach = ConvertToDeviceFormat(desc->pDepthStencilAttachment);
-            info.pDepthAttachment = (VkRenderingAttachmentInfo*)&depthAttach;
+            depthAttach.clearValue.color = *(VkClearColorValue*)&desc->pDepthStencilAttachment->clearColor;
+            depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttach.imageView = *(VkImageView*)desc->pDepthStencilAttachment->ImageView.ptr;
+            depthAttach.loadOp = vloadOp(desc->pDepthStencilAttachment->loadOp);
+            depthAttach.storeOp = vStoreOp(desc->pDepthStencilAttachment->storeOp);
+            depthAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            info.pDepthAttachment = &depthAttach;
         }
         info.colorAttachmentCount = desc->numColorAttachments;
         info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
@@ -100,17 +135,6 @@ namespace RHI
     RESULT GraphicsCommandList::End()
     {
         return vkEndCommandBuffer((VkCommandBuffer)ID);
-    }
-    RenderingAttachmentDescStorage RHI_API ConvertToDeviceFormat(const RenderingAttachmentDesc* desc)
-    {
-        VkRenderingAttachmentInfoKHR color_attachment_info = {};
-        color_attachment_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
-        color_attachment_info.imageView = (*(VkImageView*)desc->ImageView.ptr);
-        color_attachment_info.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR;
-        color_attachment_info.loadOp = VulkanLoadOp(desc->loadOp);
-        color_attachment_info.storeOp = VulkanStoreOp(desc->storeOp);
-        color_attachment_info.clearValue = {desc->clearColor.r, desc->clearColor.g, desc->clearColor.b, desc->clearColor.a};
-        return *((RenderingAttachmentDescStorage*)(&color_attachment_info));
     }
     RESULT GraphicsCommandList::SetPipelineState(PipelineStateObject* pso)
     {
@@ -158,20 +182,20 @@ namespace RHI
     {
         return RESULT();
     }
-    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature rs, DescriptorSet set, std::uint32_t rootParamIndex)
+    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
     {
         VkDescriptorSet sets;
-        sets = (VkDescriptorSet)set.ID;
-        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs.ID, rootParamIndex, 1, &sets, 0, 0);
+        sets = (VkDescriptorSet)set->ID;
+        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, rootParamIndex, 1, &sets, 0, 0);
         return RESULT();
     }
-    RESULT GraphicsCommandList::SetDescriptorHeap(DescriptorHeap heap)
+    RESULT GraphicsCommandList::SetDescriptorHeap(DescriptorHeap* heap)
     {
         return 0;
     }
-    RESULT GraphicsCommandList::BindIndexBuffer(Buffer buffer, uint32_t offset)
+    RESULT GraphicsCommandList::BindIndexBuffer(Buffer* buffer, uint32_t offset)
     {
-        vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer.ID, offset, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, VK_INDEX_TYPE_UINT16);
         return RESULT();
     }
     RESULT GraphicsCommandList::DrawIndexed(uint32_t IndexCount, uint32_t InstanceCount, uint32_t startIndexLocation, uint32_t startVertexLocation, uint32_t startInstanceLocation)
@@ -179,16 +203,16 @@ namespace RHI
         vkCmdDrawIndexed((VkCommandBuffer)ID, IndexCount, InstanceCount, startIndexLocation, startVertexLocation, startInstanceLocation);
         return 0;
     }
-    RESULT GraphicsCommandList::CopyBufferRegion(uint32_t srcOffset, uint32_t dstOffset, uint32_t size, Buffer srcBuffer, Buffer dstBuffer)
+    RESULT GraphicsCommandList::CopyBufferRegion(uint32_t srcOffset, uint32_t dstOffset, uint32_t size, Buffer* srcBuffer, Buffer* dstBuffer)
     {
         VkBufferCopy copy{};
         copy.size = size;
         copy.srcOffset = srcOffset;
         copy.dstOffset = dstOffset;
-        vkCmdCopyBuffer((VkCommandBuffer)ID, (VkBuffer)srcBuffer.ID, (VkBuffer)dstBuffer.ID, 1, &copy);
+        vkCmdCopyBuffer((VkCommandBuffer)ID, (VkBuffer)srcBuffer->ID, (VkBuffer)dstBuffer->ID, 1, &copy);
         return RESULT();
     }
-    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture texture)
+    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
     {
         VkBufferImageCopy copy{};
         copy.bufferImageHeight = srcHeight;
@@ -200,7 +224,7 @@ namespace RHI
         copy.imageSubresource.baseArrayLayer = dstRange.FirstArraySlice;
         copy.imageSubresource.layerCount = dstRange.NumArraySlices;
         copy.imageSubresource.mipLevel = dstRange.IndexOrFirstMipLevel;
-        vkCmdCopyBufferToImage((VkCommandBuffer)ID, (VkBuffer)buffer.ID, (VkImage)texture.ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        vkCmdCopyBufferToImage((VkCommandBuffer)ID, (VkBuffer)buffer->ID, (VkImage)texture->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
         return RESULT();
     }
 }

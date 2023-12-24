@@ -8,10 +8,11 @@ namespace RHI
 {
 	class RHI_API SwapChain : public Object
 	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(SwapChain);
 	public:
 		RESULT Present(std::uint32_t imgIndex);
-		Internal_ID present_semaphore;
-		Internal_ID PresentQueue_ID;
+
 	};
 	struct RHI_API SwapChainDesc
 	{

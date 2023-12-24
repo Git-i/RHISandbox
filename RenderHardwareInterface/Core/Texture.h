@@ -8,6 +8,8 @@ namespace RHI
 	protected:
 		DECL_CLASS_CONSTRUCTORS(Texture);
 	public:
+		void Map(void** data);
+		void UnMap();
 	};
 
 

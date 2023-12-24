@@ -8,25 +8,17 @@
 #include <csetjmp>
 namespace RHI
 {   
-    
-    std::vector<HeapProperties> HeapProps;
-    std::uint32_t DefaultHeapIndex = UINT32_MAX;
-    std::uint32_t UploadHeapIndex = UINT32_MAX;
-    std::uint32_t ReadbackHeapIndex = UINT32_MAX;
-
-    static VkPrivateDataSlot slot;
-    static QueueFamilyIndices indices;
     Default_t Default = {};
     Zero_t Zero = {};
     PFN_vkSetPrivateDataEXT SetPrivateData = nullptr;
     PFN_vkGetPrivateDataEXT GetPrivateData = nullptr;
-    static void SelectHeapIndices(std::vector<HeapProperties>& props)
+    static void SelectHeapIndices(vDevice* device)
     {
         std::uint32_t DefaultHeap = UINT32_MAX;
         std::uint32_t UploadHeap = UINT32_MAX;
         std::uint32_t ReadbackHeap = UINT32_MAX;
         int iterator = 0;
-        for (auto& prop : props)
+        for (auto& prop : device->HeapProps)
         {
             if (prop.memoryLevel == MemoryLevel::DedicatedRAM && iterator < DefaultHeap) DefaultHeap = iterator;
             if (prop.pageProperty == CPUPageProperty::WriteCached) UploadHeap = iterator;
@@ -34,9 +26,9 @@ namespace RHI
             if (prop.pageProperty == CPUPageProperty::WriteCombined || prop.pageProperty == CPUPageProperty::WriteCached && iterator < ReadbackHeap) ReadbackHeap = iterator;
             iterator++;
         }
-        DefaultHeapIndex = DefaultHeap;
-        UploadHeapIndex = UploadHeap;
-        ReadbackHeapIndex = ReadbackHeap;
+        device->DefaultHeapIndex = DefaultHeap;
+        device->UploadHeapIndex = UploadHeap;
+        device->ReadbackHeapIndex = ReadbackHeap;
     }
     static VkResult CreateShaderModule(const char* filename, VkPipelineShaderStageCreateInfo* shader_info, VkShaderStageFlagBits stage,int index, VkShaderModule* module,Internal_ID device)
     {
@@ -88,11 +80,13 @@ namespace RHI
         }
         return flags;
     }
-    RESULT Device::Create(PhysicalDevice PhysicalDevice, CommandQueueDesc const* commandQueueInfos, int numCommandQueues, CommandQueue* commandQueues, Device* device)
+    RESULT Device::Create(PhysicalDevice* PhysicalDevice, CommandQueueDesc const* commandQueueInfos, int numCommandQueues, CommandQueue** commandQueues, Device** device)
     {
-        VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice.ID;
+        VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
         
         VkPhysicalDeviceMemoryProperties memProps;
+        vDevice* vdevice = new vDevice;
+        vCommandQueue* vqueue = new vCommandQueue[numCommandQueues];
         vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProps);
         for (int i = 0; i < memProps.memoryTypeCount; i++)
         {
@@ -105,14 +99,10 @@ namespace RHI
             else if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) CPUprop = RHI::CPUPageProperty::WriteCombined;
             else CPUprop = RHI::CPUPageProperty::NonVisible;
             prop.pageProperty = CPUprop;
-            HeapProps.emplace_back(prop);
+            vdevice->HeapProps.emplace_back(prop);
         }
-        SelectHeapIndices(HeapProps);
-        indices = findQueueFamilyIndices(PhysicalDevice);
-        uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, nullptr);
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, queueFamilies.data());
+        SelectHeapIndices(vdevice);
+        vdevice->indices = findQueueFamilyIndices(PhysicalDevice);
 
         
         std::vector<VkDeviceQueueCreateInfo> queueInfos(numCommandQueues);
@@ -124,20 +114,20 @@ namespace RHI
             queueInfos[i].pQueuePriorities = &queuePriority;
             queueInfos[i].queueCount = 1;
             std::uint32_t index = 0;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Direct) index = indices.graphicsIndex;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Compute) index = indices.computeIndex;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Copy) index = indices.copyIndex;
+            if (commandQueueInfos[i].CommandListType == CommandListType::Direct) index = vdevice->indices.graphicsIndex;
+            if (commandQueueInfos[i].CommandListType == CommandListType::Compute) index = vdevice->indices.computeIndex;
+            if (commandQueueInfos[i].CommandListType == CommandListType::Copy) index = vdevice->indices.copyIndex;
             queueInfos[i].queueFamilyIndex = index;
             queueInfos[i].flags = 0;
         }
-        if (indices.graphicsIndex != indices.presentIndex)
+        if (vdevice->indices.graphicsIndex != vdevice->indices.presentIndex)
         {
             VkDeviceQueueCreateInfo info = {};
             info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             float queuePriority = 0.f;
             info.pQueuePriorities = &queuePriority;
             info.queueCount = 1;
-            info.queueFamilyIndex = indices.presentIndex;
+            info.queueFamilyIndex = vdevice->indices.presentIndex;
             info.flags = 0;
             queueInfos.push_back(info);
         }
@@ -178,54 +168,60 @@ namespace RHI
         };
         info.enabledExtensionCount = ARRAYSIZE(ext_name);
         info.ppEnabledExtensionNames = ext_name;
-        VkResult res = vkCreateDevice(vkPhysicalDevice, &info, nullptr, (VkDevice*)&device->ID);
+        VkResult res = vkCreateDevice(vkPhysicalDevice, &info, nullptr, (VkDevice*)&vdevice->ID);
         
         typedef  VkResult(VKAPI_PTR * PFN_vkCreatePrivateDataSlotEXT)(VkDevice, const VkPrivateDataSlotCreateInfo*, const VkAllocationCallbacks*, VkPrivateDataSlot*);
         VkPrivateDataSlotCreateInfo Slotinfo = {};
         Slotinfo.sType = VK_STRUCTURE_TYPE_PRIVATE_DATA_SLOT_CREATE_INFO;
-        PFN_vkCreatePrivateDataSlotEXT fn = (PFN_vkCreatePrivateDataSlotEXT)vkGetDeviceProcAddr((VkDevice)device->ID, "vkCreatePrivateDataSlotEXT");
-        SetPrivateData = (PFN_vkSetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)device->ID, "vkSetPrivateDataEXT");
-        GetPrivateData = (PFN_vkGetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)device->ID, "vkGetPrivateDataEXT");
-        vkCreatePrivateDataSlotEXT((VkDevice)device->ID, &Slotinfo, nullptr, &slot);
+        PFN_vkCreatePrivateDataSlotEXT fn = (PFN_vkCreatePrivateDataSlotEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkCreatePrivateDataSlotEXT");
+        SetPrivateData = (PFN_vkSetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkSetPrivateDataEXT");
+        GetPrivateData = (PFN_vkGetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkGetPrivateDataEXT");
+        vkCreatePrivateDataSlotEXT((VkDevice)vdevice->ID, &Slotinfo, nullptr, &vdevice->slot);
         for (int i = 0; i < numCommandQueues; i++)
         {
-            vkGetDeviceQueue((VkDevice)device->ID, queueInfos[i].queueFamilyIndex, 0, (VkQueue*)&commandQueues[i].ID);
-            commandQueues[i].Device_ID = device->ID;
-            commandQueues[i].PrivateDataSlot = slot;
+            vkGetDeviceQueue((VkDevice)vdevice->ID, queueInfos[i].queueFamilyIndex, 0, (VkQueue*)&vqueue[i].ID);
+            vqueue[i].Device_ID = vdevice->ID;
+            vqueue[i].PrivateDataSlot = vdevice->slot;
+            commandQueues[i] = &vqueue[i];
         }
+        *device = vdevice;
         return res;
     }
-    RESULT Device::CreateCommandAllocator(CommandListType type,CommandAllocator* pAllocator)
+    RESULT Device::CreateCommandAllocator(CommandListType type,CommandAllocator** pAllocator)
     {
+        vCommandAllocator* vallocator = new vCommandAllocator;
         std::uint32_t index = 0;
-        if (type == CommandListType::Direct) index = indices.graphicsIndex;
-        if (type == CommandListType::Compute) index = indices.computeIndex;
-        if (type == CommandListType::Copy) index = indices.copyIndex;
+        if (type == CommandListType::Direct) index = ((vDevice*)this)->indices.graphicsIndex;
+        if (type == CommandListType::Compute) index = ((vDevice*)this)->indices.computeIndex;
+        if (type == CommandListType::Copy) index = ((vDevice*)this)->indices.copyIndex;
         VkCommandPoolCreateInfo info{};
         info.pNext = NULL;
         info.queueFamilyIndex = index;
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&pAllocator->ID);
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_UNKNOWN, (std::uint64_t)pAllocator->ID, slot, 1);
-        pAllocator->PrivateDataSlot = slot;
-        pAllocator->Device_ID = ID;
+        vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&vallocator->ID);
+        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_UNKNOWN, (std::uint64_t)vallocator->ID, ((vDevice*)this)->slot, 1);
+        vallocator->PrivateDataSlot = ((vDevice*)this)->slot;
+        vallocator->Device_ID = ID;
+        *pAllocator = vallocator;
         return 0;
     }
-    RESULT Device::CreateCommandList(CommandListType type, CommandAllocator allocator, CommandList* pCommandList)
+    template <> RESULT Device::CreateCommandList(CommandListType type, CommandAllocator* allocator, GraphicsCommandList** pCommandList)
     {
+        vGraphicsCommandList* vCommandlist = new vGraphicsCommandList;
         VkCommandBufferAllocateInfo Info = {};
         Info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        Info.commandPool = (VkCommandPool)allocator.ID;
+        Info.commandPool = (VkCommandPool)allocator->ID;
         Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         Info.commandBufferCount = 1;
         VkCommandBuffer commandBuffer;
         VkResult res = vkAllocateCommandBuffers((VkDevice)ID, &Info, &commandBuffer);
-        pCommandList->ID = commandBuffer;
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_COMMAND_BUFFER, (std::uint64_t)pCommandList->ID, slot, 1);
-        pCommandList->PrivateDataSlot = slot;
-        pCommandList->Device_ID = ID;
-        pCommandList->m_allocator = allocator.ID;
+        vCommandlist->ID = commandBuffer;
+        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_COMMAND_BUFFER, (std::uint64_t)vCommandlist->ID, ((vDevice*)this)->slot, 1);
+        vCommandlist->PrivateDataSlot = ((vDevice*)this)->slot;
+        vCommandlist->Device_ID = ID;
+        vCommandlist->m_allocator = allocator->ID;
+        *pCommandList = vCommandlist;
         return 0;
     }
     VkDescriptorType DescType(RHI::DescriptorType type)
@@ -246,11 +242,12 @@ namespace RHI
             break;
         }
     }
-    RESULT Device::CreateDescriptorHeap(DescriptorHeapDesc* desc, DescriptorHeap* descriptorHeap)
+    RESULT Device::CreateDescriptorHeap(DescriptorHeapDesc* desc, DescriptorHeap** descriptorHeap)
     {
+        vDescriptorHeap* vdescriptorHeap = new vDescriptorHeap;
         if (desc->poolSizes->type == DescriptorType::RTV || desc->poolSizes->type == DescriptorType::DSV)
         {
-            descriptorHeap->ID = new VkImageView[desc->poolSizes->numDescriptors];
+            vdescriptorHeap->ID = new VkImageView[desc->poolSizes->numDescriptors];
         }
         else
         {
@@ -267,8 +264,9 @@ namespace RHI
             poolInfo.pPoolSizes = poolSize;
             poolInfo.maxSets = desc->maxDescriptorSets;
 
-            return vkCreateDescriptorPool((VkDevice)ID, &poolInfo, nullptr, (VkDescriptorPool*)&descriptorHeap->ID);
+            vkCreateDescriptorPool((VkDevice)ID, &poolInfo, nullptr, (VkDescriptorPool*)&vdescriptorHeap->ID);
         }
+        *descriptorHeap = vdescriptorHeap;
         return 0;
     }
     RESULT Device::CreateRenderTargetView(Texture* texture, RenderTargetViewDesc* desc, CPU_HANDLE heapHandle)
@@ -287,24 +285,46 @@ namespace RHI
         info.subresourceRange.levelCount = 1;
         info.subresourceRange.baseArrayLayer = 0;
         info.subresourceRange.layerCount = 1;
-        info.format = VK_FORMAT_B8G8R8A8_UNORM;
+        info.format = VK_FORMAT_B8G8R8A8_UNORM; //todo
        return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
         
+    }
+    RESULT Device::CreateDepthStencilView(Texture* texture, DepthStencilViewDesc* desc, CPU_HANDLE heapHandle)
+    {
+        VkImageViewCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        info.pNext = NULL;
+        info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        info.image = (VkImage)texture->ID;
+        info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        info.subresourceRange.baseMipLevel = 0;
+        info.subresourceRange.levelCount = 1;
+        info.subresourceRange.baseArrayLayer = 0;
+        info.subresourceRange.layerCount = 1;
+        info.format = VK_FORMAT_D32_SFLOAT;
+        return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
     }
     std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
     {
         return sizeof(VkImageView);
     }
-    RESULT Device::GetSwapChainImage(SwapChain swapchain, std::uint32_t index, Texture** texture)
+    RESULT Device::GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture)
     {
+        vTexture* vtexture = new vTexture;
         std::uint32_t img = index + 1;
         std::vector<VkImage> images(img);
-        VkResult res = vkGetSwapchainImagesKHR((VkDevice)ID, (VkSwapchainKHR)swapchain.ID, &img, images.data());
-        texture->ID = images[index];
+        VkResult res = vkGetSwapchainImagesKHR((VkDevice)ID, (VkSwapchainKHR)swapchain->ID, &img, images.data());
+        (vtexture)->ID = images[index];
+        *texture = vtexture;
         return res;
     }
-    RESULT Device::CreateFence(Fence* fence, std::uint64_t val)
+    RESULT Device::CreateFence(Fence** fence, std::uint64_t val)
     {
+        vFence* vfence = new vFence;
         VkSemaphoreTypeCreateInfo timelineCreateInfo;
         timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
         timelineCreateInfo.pNext = NULL;
@@ -318,26 +338,43 @@ namespace RHI
 
         VkSemaphore timelineSemaphore;
         VkResult res = vkCreateSemaphore((VkDevice)ID, &createInfo, NULL, &timelineSemaphore);
-        fence->ID = timelineSemaphore;
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_SEMAPHORE, (std::uint64_t)fence->ID, slot, 1);
-        fence->PrivateDataSlot = slot;
-        fence->Device_ID = ID;
+        vfence->ID = timelineSemaphore;
+        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_SEMAPHORE, (std::uint64_t)vfence->ID, ((vDevice*)this)->slot, 1);
+        vfence->PrivateDataSlot = ((vDevice*)this)->slot;
+        vfence->Device_ID = ID;
+        *fence = vfence;
         return res;
     }
-    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer* buffer, Heap* heap, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
     {
+        vBuffer* vbuffer = new vBuffer;
         VkBufferCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         info.size = desc->size;
         info.usage = VkBufferUsage(desc->usage);
-        buffer->offset = offset;
-        buffer->size = desc->size;
-        buffer->Device_ID = ID;
-        buffer->PrivateDataSlot = slot;
-        buffer->heap = heap->ID;
-        vkCreateBuffer((VkDevice)ID, &info, nullptr, (VkBuffer*)&buffer->ID);
-        vkBindBufferMemory((VkDevice)ID, (VkBuffer)buffer->ID, (VkDeviceMemory)heap->ID, offset);
+        vbuffer->offset = offset;
+        vbuffer->size = desc->size;
+        vbuffer->Device_ID = ID;
+        vbuffer->PrivateDataSlot = ((vDevice*)this)->slot;
+        vbuffer->heap = heap->ID;
+        vkCreateBuffer((VkDevice)ID, &info, nullptr, (VkBuffer*)&vbuffer->ID);
+        if (type == ResourceType::Commited)
+        {
+            RHI::Heap* iheap;
+            RHI::HeapDesc hdesc;
+            RHI::MemoryReqirements req;
+            GetBufferMemoryRequirements(desc, &req);
+            hdesc.props = *props;
+            hdesc.size = req.size;
+            CreateHeap(&hdesc, &iheap, nullptr);
+            vkBindBufferMemory((VkDevice)ID, (VkBuffer)vbuffer->ID, (VkDeviceMemory)iheap->ID, 0);
+        }
+        else if (type == ResourceType::Placed)
+        {
+            vkBindBufferMemory((VkDevice)ID, (VkBuffer)vbuffer->ID, (VkDeviceMemory)heap->ID, offset);
+        }
+        *buffer = vbuffer;
         return RESULT();
     }
     RESULT Device::GetBufferMemoryRequirements(BufferDesc* desc, MemoryReqirements* requirements)
@@ -358,8 +395,9 @@ namespace RHI
         requirements->memoryTypeBits = req.memoryRequirements.memoryTypeBits;
         return RESULT();
     }
-    RESULT Device::CreateHeap(HeapDesc* desc, Heap* heap, bool* usedFallback)
+    RESULT Device::CreateHeap(HeapDesc* desc, Heap** heap, bool* usedFallback)
     {
+        vHeap* vheap = new vHeap;
         if(usedFallback)*usedFallback = false;
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -368,7 +406,7 @@ namespace RHI
         if (desc->props.type == HeapType::Custom)
         {
             uint32_t iterator = 0;
-            for (auto& prop : HeapProps)
+            for (auto& prop : ((vDevice*)this)->HeapProps)
             {
                 if (prop.memoryLevel != desc->props.memoryLevel) { iterator++; continue; }
                 if (prop.pageProperty != CPUPageProperty::NonVisible && desc->props.pageProperty == CPUPageProperty::Any)
@@ -382,23 +420,26 @@ namespace RHI
             if (MemIndex == UINT32_MAX)
             {
                 if(usedFallback)*usedFallback = true;
-                if (desc->props.FallbackType == HeapType::Default)  MemIndex = DefaultHeapIndex;
-                if (desc->props.FallbackType == HeapType::Upload)   MemIndex = UploadHeapIndex;
-                if (desc->props.FallbackType == HeapType::Readback) MemIndex = ReadbackHeapIndex;
+                if (desc->props.FallbackType == HeapType::Default)  MemIndex = ((vDevice*)this)->DefaultHeapIndex;
+                if (desc->props.FallbackType == HeapType::Upload)   MemIndex = ((vDevice*)this)->UploadHeapIndex;
+                if (desc->props.FallbackType == HeapType::Readback) MemIndex = ((vDevice*)this)->ReadbackHeapIndex;
             }
         }
         else
         {
-            if (desc->props.type == HeapType::Default)  MemIndex = DefaultHeapIndex;
-            if (desc->props.type == HeapType::Upload)   MemIndex = UploadHeapIndex;
-            if (desc->props.type == HeapType::Readback) MemIndex = ReadbackHeapIndex;
+            if (desc->props.type == HeapType::Default)  MemIndex = ((vDevice*)this)->DefaultHeapIndex;
+            if (desc->props.type == HeapType::Upload)   MemIndex = ((vDevice*)this)->UploadHeapIndex;
+            if (desc->props.type == HeapType::Readback) MemIndex = ((vDevice*)this)->ReadbackHeapIndex;
         }
         allocInfo.memoryTypeIndex = MemIndex;
-        return vkAllocateMemory((VkDevice)ID, &allocInfo, nullptr, (VkDeviceMemory*)&heap->ID);
+        *heap = vheap;
+        return vkAllocateMemory((VkDevice)ID, &allocInfo, nullptr, (VkDeviceMemory*)&vheap->ID);
     }
     
-    RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature* rootSignature, DescriptorSetLayout* pSetLayouts)
+    RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature** rootSignature, DescriptorSetLayout** pSetLayouts)
     {
+        vDescriptorSetLayout* vSetLayouts = new vDescriptorSetLayout[desc->numRootParameters];
+        vRootSignature* vrootSignature = new vRootSignature;
         VkDescriptorSetLayout descriptorSetLayout[5];
         //VkPushConstantRange pushConstantRanges[5];
         VkDescriptorSetLayoutCreateInfo layoutInfo[5]{};
@@ -419,33 +460,25 @@ namespace RHI
             layoutInfo[i].pBindings = LayoutBinding;
             layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
             vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
+            pSetLayouts[i] = &vSetLayouts[i];
+            vSetLayouts[i].Device_ID = ID;
+            vSetLayouts[i].PrivateDataSlot = ((vDevice*)this)->slot;
         }
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = desc->numRootParameters;
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
-        vkCreatePipelineLayout((VkDevice)ID, &pipelineLayoutInfo, nullptr, (VkPipelineLayout*)&rootSignature->ID);
+        vkCreatePipelineLayout((VkDevice)ID, &pipelineLayoutInfo, nullptr, (VkPipelineLayout*)&vrootSignature->ID);
+        vrootSignature->Device_ID = ID;
+        vrootSignature->PrivateDataSlot = ((vDevice*)this)->slot;
+        *rootSignature = vrootSignature;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
-            pSetLayouts[i].ID = descriptorSetLayout[i];
+            vSetLayouts[i].ID = descriptorSetLayout[i];
         return RESULT();
     }
-    RESULT Device::WaitForFence(Fence fence, std::uint64_t val)
+    RESULT Device::CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject** pPSO)
     {
-        const uint64_t waitValue = val;
-
-        VkSemaphoreWaitInfo waitInfo;
-        waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
-        waitInfo.pNext = NULL;
-        waitInfo.flags = 0;
-        waitInfo.semaphoreCount = 1;
-        waitInfo.pSemaphores = (VkSemaphore*)&fence.ID;
-        waitInfo.pValues = &waitValue;
-
-        
-        return vkWaitSemaphores((VkDevice)ID, &waitInfo, UINT64_MAX);;
-    }
-    RESULT Device::CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject* pPSO)
-    {
+        vPipelineStateObject* vPSO = new vPipelineStateObject;
         GFX_ASSERT(desc->numInputElements < 5);
         VkPipelineShaderStageCreateInfo ShaderpipelineInfo[5] = {};
         VkShaderModule modules[5];
@@ -531,6 +564,7 @@ namespace RHI
         rasterizer.depthBiasClamp = 0.0f; // Optional
         rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
+
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
@@ -560,8 +594,22 @@ namespace RHI
         colorBlending.blendConstants[1] = 0.0f; // Optional
         colorBlending.blendConstants[2] = 0.0f; // Optional
         colorBlending.blendConstants[3] = 0.0f; // Optional
+        
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.depthTestEnable = desc->DepthEnabled;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; //todo
+        depthStencil.depthWriteEnable = true;
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+        VkPipelineRenderingCreateInfo pipelineRendereing{};
+        pipelineRendereing.colorAttachmentCount = 1;//todo
+        pipelineRendereing.depthAttachmentFormat = FormatConv(desc->DSVFormat);
+        VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+        pipelineRendereing.pColorAttachmentFormats = &format;
+        pipelineRendereing.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.pNext = &pipelineRendereing;
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = index;
         pipelineInfo.pStages = ShaderpipelineInfo;
@@ -570,22 +618,26 @@ namespace RHI
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr; // Optional
+        pipelineInfo.pDepthStencilState = &depthStencil; // Optional
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = (VkPipelineLayout)desc->rootSig.ID;
+        pipelineInfo.layout = (VkPipelineLayout)desc->rootSig->ID;
         pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
         pipelineInfo.basePipelineIndex = -1; // Optional
+        
 
-        vkCreateGraphicsPipelines((VkDevice)ID, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, (VkPipeline*)&pPSO->ID);
+
+        vkCreateGraphicsPipelines((VkDevice)ID, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, (VkPipeline*)&vPSO->ID);
+        *pPSO = vPSO;
         for(int i = 0; i < index; i++)
             vkDestroyShaderModule((VkDevice)ID, modules[i], nullptr);
         return RESULT();
     }
-    RESULT Device::CreateDescriptorSets(DescriptorHeap* heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet* pSets)
+    RESULT Device::CreateDescriptorSets(DescriptorHeap* heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet** pSets)
     {
+        vDescriptorSet* vSets = new vDescriptorSet[numDescriptorSets];
         VkDescriptorSetLayout vklayouts[5];
         for (uint32_t i = 0; i < numDescriptorSets; i++)
         {
@@ -599,7 +651,10 @@ namespace RHI
         VkDescriptorSet descriptorSets[5];
         vkAllocateDescriptorSets((VkDevice)ID, &allocInfo, descriptorSets);
         for (uint32_t i = 0; i < numDescriptorSets; i++)
-            pSets[i].ID = descriptorSets[i];
+        {
+            vSets[i].ID = descriptorSets[i];
+            pSets[i] = &vSets[i];
+        }
         return RESULT();
     }
     RESULT Device::UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
@@ -612,7 +667,7 @@ namespace RHI
         {
             if (desc[i].type == RHI::DescriptorType::CBV)
             {
-                Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer.ID;
+                Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer->ID;
                 Binfo[i].offset = desc[i].bufferInfos->offset;
                 Binfo[i].range = desc[i].bufferInfos->range;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -624,7 +679,7 @@ namespace RHI
                 info.viewType = VK_IMAGE_VIEW_TYPE_2D; //todo
                 info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-                info.image = (VkImage)desc[i].textureInfos->texture.ID;
+                info.image = (VkImage)desc[i].textureInfos->texture->ID;
                 info.format = VK_FORMAT_R8G8B8A8_UNORM;
                 info.components = { VK_COMPONENT_SWIZZLE_IDENTITY };
                 info.subresourceRange.levelCount = 1;
@@ -676,8 +731,9 @@ namespace RHI
             flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         return flags;
     }
-    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
     {
+        vTexture* vtexture = new vTexture;
         VkImageCreateInfo info{};
         info.arrayLayers = desc->type == TextureType::Texture3D ? 1 : desc->depthOrArraySize;
         info.extent.width = desc->width;
@@ -692,8 +748,23 @@ namespace RHI
         info.tiling = ImageTiling(desc->mode);
         info.usage = ImageUsage(desc->usage);
         info.samples = VK_SAMPLE_COUNT_1_BIT;
-        vkCreateImage((VkDevice)ID, &info, nullptr, (VkImage*)&texture->ID);
-        vkBindImageMemory((VkDevice)ID, (VkImage)texture->ID, (VkDeviceMemory)heap->ID, offset);
+        vkCreateImage((VkDevice)ID, &info, nullptr, (VkImage*)&vtexture->ID);
+        if (type == ResourceType::Commited)
+        {
+            RHI::Heap* iheap;
+            RHI::HeapDesc hdesc;
+            RHI::MemoryReqirements req;
+            GetTextureMemoryRequirements(desc, &req);
+            hdesc.props = *props;
+            hdesc.size = req.size;
+            CreateHeap(&hdesc, &iheap, nullptr);
+            vkBindImageMemory((VkDevice)ID, (VkImage)vtexture->ID, (VkDeviceMemory)iheap->ID, 0);
+        }
+        else if (type == ResourceType::Placed)
+        {
+            vkBindImageMemory((VkDevice)ID, (VkImage)vtexture->ID, (VkDeviceMemory)heap->ID, offset);
+        }
+        *texture = vtexture;
         return RESULT();
     }
     RESULT Device::GetTextureMemoryRequirements(TextureDesc* desc, MemoryReqirements* requirements)

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "../SwapChain.h"
 #include "volk.h"
+#include "VulkanSpecific.h"
 #include <vector>
 namespace RHI
 {
@@ -28,21 +29,17 @@ namespace RHI
 	}
 	RESULT SwapChain::Present(std::uint32_t imgIndex)
 	{
-		vkAcquireNextImageKHR((VkDevice)Device_ID, (VkSwapchainKHR)ID, UINT64_MAX, (VkSemaphore)present_semaphore, VK_NULL_HANDLE, &imgIndex);
+		vkAcquireNextImageKHR((VkDevice)Device_ID, (VkSwapchainKHR)ID, UINT64_MAX, ((vSwapChain*)this)->present_semaphore, VK_NULL_HANDLE, &imgIndex);
 		VkPresentInfoKHR presentInfo{};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = (VkSemaphore*)&present_semaphore;
+		presentInfo.pWaitSemaphores = &((vSwapChain*)this)->present_semaphore;
 		VkSwapchainKHR swapChains[] = { (VkSwapchainKHR)ID };
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imgIndex;
-		vkQueuePresentKHR((VkQueue)PresentQueue_ID, &presentInfo);
+		vkQueuePresentKHR(((vSwapChain*)this)->PresentQueue_ID, &presentInfo);
 		return RESULT();
-	}
-	void SwapChain::Destroy()
-	{
-
 	}
 }

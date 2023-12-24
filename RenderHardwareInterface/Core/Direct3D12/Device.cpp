@@ -155,10 +155,10 @@ namespace RHI
     {
         return ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12DescriptorHeapType(type));
     }
-    RESULT Device::GetSwapChainImage(SwapChain swapchain, std::uint32_t index, Texture** texture)
+    RESULT Device::GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture)
     {
         (*texture) = new D3D12Texture;
-        return ((IDXGISwapChain*)swapchain.ID)->GetBuffer(index, IID_PPV_ARGS((ID3D12Resource**)&(*texture)->ID));
+        return ((IDXGISwapChain*)swapchain->ID)->GetBuffer(index, IID_PPV_ARGS((ID3D12Resource**)&(*texture)->ID));
     }
     RESULT Device::CreateFence(Fence** fence, std::uint64_t val)
     {
@@ -272,7 +272,32 @@ namespace RHI
         }
         return flags;
     }
-    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, std::uint64_t offset, ResourceType type)
+    D3D12_HEAP_PROPERTIES D3D12HeapProps(RHI::HeapProperties* props)
+    {
+        D3D12_HEAP_PROPERTIES hp;
+        if (props->type == HeapType::Custom)
+        {
+            hp.Type = D3D12_HEAP_TYPE_CUSTOM;
+            if (props->memoryLevel == MemoryLevel::DedicatedRAM) hp.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+            if (props->memoryLevel == MemoryLevel::SharedRAM) hp.MemoryPoolPreference = D3D12_MEMORY_POOL_L1;
+            if (props->memoryLevel == MemoryLevel::Unknown) hp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+            if (props->pageProperty == CPUPageProperty::WriteCombined) hp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            if (props->pageProperty == CPUPageProperty::WriteBack) hp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+            if (props->pageProperty == CPUPageProperty::Any) hp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            if (props->pageProperty == CPUPageProperty::NonVisible) hp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+        }
+        else
+        {
+            hp.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+            hp.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        }
+        if (props->type == HeapType::Default) hp.Type = D3D12_HEAP_TYPE_DEFAULT;
+        if (props->type == HeapType::Readback) hp.Type = D3D12_HEAP_TYPE_READBACK;
+        if (props->type == HeapType::Upload) hp.Type = D3D12_HEAP_TYPE_UPLOAD;
+        hp.CreationNodeMask = hp.VisibleNodeMask = 0;
+        return hp;
+    }
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
     {
         D3D12Texture* d3d12texture = new D3D12Texture;
         D3D12_RESOURCE_DESC td{};
@@ -297,15 +322,17 @@ namespace RHI
             cval.Color[3] = desc->optimizedClearValue->clearColor.a;
             cval_ptr = &cval;
         }
-        CD3DX12_HEAP_PROPERTIES hProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
         if (type == ResourceType::Commited)
+        {
+            D3D12_HEAP_PROPERTIES hProp = D3D12HeapProps(props);
             ((ID3D12Device*)ID)->CreateCommittedResource(&hProp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COMMON, cval_ptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12texture->ID));
+        }
         if (type == ResourceType::Placed)
             ((ID3D12Device*)ID)->CreatePlacedResource((ID3D12Heap*)heap->ID, offset, &td, D3D12_RESOURCE_STATE_COMMON, cval_ptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12texture->ID));
         *texture = d3d12texture;
         return RESULT();
     }
-    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, std::uint64_t offset,ResourceType type)
+    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props,std::uint64_t offset,ResourceType type)
     {
         D3D12Buffer* d3d12buffer = new D3D12Buffer;
         D3D12_RESOURCE_DESC bd{};
@@ -319,9 +346,11 @@ namespace RHI
         bd.SampleDesc.Quality = 0;
         bd.Width = desc->size;
         bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        CD3DX12_HEAP_PROPERTIES hProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-        if(type == ResourceType::Commited)
+        if (type == ResourceType::Commited)
+        {
+            D3D12_HEAP_PROPERTIES hProp = D3D12HeapProps(props);
             ((ID3D12Device*)ID)->CreateCommittedResource(&hProp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12buffer->ID));
+        }
         if (type == ResourceType::Placed)
             ((ID3D12Device*)ID)->CreatePlacedResource((ID3D12Heap*)heap->ID, offset, &bd, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12buffer->ID));
         *buffer = d3d12buffer;

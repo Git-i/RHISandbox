@@ -7,8 +7,10 @@
 #include <iostream>
 namespace RHI
 {
-	RESULT Instance::Create(Instance* instance)
+	RESULT Instance::Create(Instance** instance)
 	{
+		vInstance* vinstance = new vInstance;
+		*instance = vinstance;
 		volkInitialize();
 		VkInstanceCreateInfo info = {};
 		const char* layerName = "VK_LAYER_KHRONOS_validation";
@@ -19,27 +21,30 @@ namespace RHI
 		info.ppEnabledLayerNames = &layerName;
 		info.enabledExtensionCount = 2;
 		info.ppEnabledExtensionNames = extensionName;
-		VkResult res =  vkCreateInstance(&info, nullptr, (VkInstance*)&instance->ID);
-		volkLoadInstance((VkInstance)instance->ID);
+		VkResult res =  vkCreateInstance(&info, nullptr, (VkInstance*)&vinstance->ID);
+		volkLoadInstance((VkInstance)vinstance->ID);
 		return res;
 	}
-	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice* device)
+	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice** device)
 	{
+		vPhysicalDevice* vdevice = new vPhysicalDevice;
 		std::vector<VkPhysicalDevice> devices;
 		std::uint32_t count;
 		vkEnumeratePhysicalDevices((VkInstance)ID, &count, nullptr);
 		devices.resize(count);
 		VkResult res = vkEnumeratePhysicalDevices((VkInstance)ID, &count, &devices[0]);
-		device->ID = devices[id];
+		vdevice->ID = devices[id];
+		*device = vdevice;
 		return res;
 	}
-	RESULT Instance::CreateSwapChain(SwapChainDesc* desc, PhysicalDevice pDevice, Device Device, CommandQueue pCommandQueue, SwapChain* pSwapChain)
+	RESULT Instance::CreateSwapChain(SwapChainDesc* desc, PhysicalDevice* pDevice, Device* Device, CommandQueue* pCommandQueue, SwapChain** pSwapChain)
 	{
+		vSwapChain* vswapChain = new vSwapChain;
 		VkSwapchainCreateInfoKHR createInfo{};
 		std::uint32_t count;
-		vkGetPhysicalDeviceSurfaceFormatsKHR((VkPhysicalDevice)pDevice.ID, (VkSurfaceKHR)desc->OutputSurface.ID, &count, nullptr);
+		vkGetPhysicalDeviceSurfaceFormatsKHR((VkPhysicalDevice)pDevice->ID, (VkSurfaceKHR)desc->OutputSurface.ID, &count, nullptr);
 		std::vector<VkSurfaceFormatKHR> format(count);
-		vkGetPhysicalDeviceSurfaceFormatsKHR((VkPhysicalDevice)pDevice.ID, (VkSurfaceKHR)desc->OutputSurface.ID, &count, format.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR((VkPhysicalDevice)pDevice->ID, (VkSurfaceKHR)desc->OutputSurface.ID, &count, format.data());
 
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		createInfo.surface = (VkSurfaceKHR)desc->OutputSurface.ID;
@@ -69,13 +74,14 @@ namespace RHI
 		createInfo.clipped = VK_TRUE;
 
 		createInfo.oldSwapchain = VK_NULL_HANDLE;
-		VkResult res = vkCreateSwapchainKHR((VkDevice)Device.ID, &createInfo, nullptr, (VkSwapchainKHR*)&pSwapChain->ID);
+		VkResult res = vkCreateSwapchainKHR((VkDevice)Device->ID, &createInfo, nullptr, (VkSwapchainKHR*)&vswapChain->ID);
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		vkCreateSemaphore((VkDevice)Device.ID, &semaphoreInfo, nullptr, (VkSemaphore*)&pSwapChain->present_semaphore);
-		pSwapChain->Device_ID = Device.ID;
-		pSwapChain->PrivateDataSlot = 0;
-		vkGetDeviceQueue((VkDevice)Device.ID, indices.presentIndex, 0, (VkQueue*)&pSwapChain->PresentQueue_ID);
+		vkCreateSemaphore((VkDevice)Device->ID, &semaphoreInfo, nullptr, (VkSemaphore*)&vswapChain->present_semaphore);
+		vswapChain->Device_ID = Device->ID;
+		vswapChain->PrivateDataSlot = 0;
+		vkGetDeviceQueue((VkDevice)Device->ID, indices.presentIndex, 0, (VkQueue*)&vswapChain->PresentQueue_ID);
+		*pSwapChain = vswapChain;
 		return 0;
 	}
 }

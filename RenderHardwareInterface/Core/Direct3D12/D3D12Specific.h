@@ -79,4 +79,8 @@ namespace RHI
     {
         friend class Device;
     };
+    class D3D12SwapChain : public SwapChain
+    {
+
+    };
 }

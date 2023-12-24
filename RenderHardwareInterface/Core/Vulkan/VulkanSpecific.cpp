@@ -8,11 +8,15 @@ namespace RHI
         using namespace RHI;
         switch (format)
         {
-        case(Format::UNKNOWN): return VK_FORMAT_UNDEFINED;
-        case(Format::R8G8B8A8_UNORM): return VK_FORMAT_R8G8B8A8_UNORM;
-        case(Format::B8G8R8A8_UNORM): return VK_FORMAT_B8G8R8A8_UNORM;
-        case(Format::R32G32B32A32_FLOAT): return VK_FORMAT_R32G32B32A32_SFLOAT;
-        case(Format::R32G32B32_FLOAT): return VK_FORMAT_R32G32B32_SFLOAT;
+            case(Format::UNKNOWN): return VK_FORMAT_UNDEFINED;
+            case(Format::R8G8B8A8_UNORM): return VK_FORMAT_R8G8B8A8_UNORM;
+            case(Format::B8G8R8A8_UNORM): return VK_FORMAT_B8G8R8A8_UNORM;
+            case(Format::R32G32B32A32_FLOAT): return VK_FORMAT_R32G32B32A32_SFLOAT;
+            case(Format::R32G32B32_FLOAT): return VK_FORMAT_R32G32B32_SFLOAT;
+            case(Format::D32_FLOAT): return VK_FORMAT_D32_SFLOAT;
+            case(Format::D24_UNORM_S8_UINT):return VK_FORMAT_D24_UNORM_S8_UINT;
+            case(Format::D16_UNORM): return VK_FORMAT_D16_UNORM;
+            case(Format::D32_FLOAT_S8X24_UINT): return VK_FORMAT_D32_SFLOAT_S8_UINT;
         default: return VK_FORMAT_UNDEFINED;
         }
     }
@@ -34,13 +38,13 @@ namespace RHI
             break;
         }
     }
-    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice device, RHI::Surface surface)
+    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface)
     {
         QueueFamilyIndices indices = {};
         uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device.ID, &queueFamilyCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device->ID, &queueFamilyCount, nullptr);
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device.ID, &queueFamilyCount, queueFamilies.data());
+        vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device->ID, &queueFamilyCount, queueFamilies.data());
         for (int i = 0; i < queueFamilyCount; i++)
         {
             if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
@@ -61,7 +65,7 @@ namespace RHI
             if (surface.ID)
             {
                 VkBool32 presentSupport = false;
-                vkGetPhysicalDeviceSurfaceSupportKHR((VkPhysicalDevice)device.ID, i, (VkSurfaceKHR)surface.ID, &presentSupport);
+                vkGetPhysicalDeviceSurfaceSupportKHR((VkPhysicalDevice)device->ID, i, (VkSurfaceKHR)surface.ID, &presentSupport);
 
                 if (presentSupport && !(indices.flags & HasPresent)) {
                     indices.presentIndex = i;

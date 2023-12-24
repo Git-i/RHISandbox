@@ -14,7 +14,6 @@ namespace RHI
 	protected:
 		DECL_CLASS_CONSTRUCTORS(CommandList);
 		friend class Device;
-		Internal_ID m_allocator;
 	};
 	struct Extent3D
 	{
