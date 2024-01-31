@@ -8,6 +8,30 @@
 #include <iostream>
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+extern "C"
+{
+    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, RHI::Device** device)
+    {
+        RHI::D3D12Device* d3d12device = new RHI::D3D12Device;
+        RHI::D3D12CommandQueue* d3d12queues = new RHI::D3D12CommandQueue[numCommandQueues];
+        D3D12_FEATURE_DATA_D3D12_OPTIONS12 opt;
+        opt.EnhancedBarriersSupported = true;
+        HRESULT res = D3D12CreateDevice((IUnknown*)PhysicalDevice->ID, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(((ID3D12Device10**)&d3d12device->ID)));
+        ((ID3D12Device10*)d3d12device->ID)->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &opt, sizeof(opt));
+        *device = d3d12device;
+        for (int i = 0; i < numCommandQueues; i++)
+        {
+            D3D12_COMMAND_QUEUE_DESC desc;
+            desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+            desc.NodeMask = 0;
+            desc.Priority = commandQueueInfos[i].Priority < 1.f ? D3D12_COMMAND_QUEUE_PRIORITY_NORMAL : D3D12_COMMAND_QUEUE_PRIORITY_HIGH;
+            desc.Type = D3D12CmdListType(commandQueueInfos[i].CommandListType);
+            ((ID3D12Device*)d3d12device->ID)->CreateCommandQueue(&desc, IID_PPV_ARGS(((ID3D12CommandQueue**)&d3d12queues[i].ID)));
+            commandQueues[i] = &d3d12queues[i];
+        }
+        return res;
+    }
+}
 namespace RHI
 {
     Default_t Default = {};
@@ -26,46 +50,25 @@ namespace RHI
             return D3D12_COMMAND_LIST_TYPE_DIRECT;
         }
     }
-    static D3D12_DESCRIPTOR_HEAP_TYPE D3D12DescriptorHeapType(DescriptorType type)
+    static D3D12_DESCRIPTOR_HEAP_TYPE D3D12DescriptorHeapType(DescriptorClass type)
     {
         switch (type)
         {
-        case(DescriptorType::RTV):
+        case(DescriptorClass::RTV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        case(DescriptorType::DSV):
+        case(DescriptorClass::DSV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        case(DescriptorType::CBV):
+        case(DescriptorClass::CBV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorType::SRV):
+        case(DescriptorClass::SRV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorType::UAV):
+        case(DescriptorClass::UAV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorType::Sampler):
+        case(DescriptorClass::Sampler):
             return D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
         default:
             return (D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES);
         }
-    }
-    RESULT Device::Create(PhysicalDevice* PhysicalDevice, CommandQueueDesc const* commandQueueInfos, int numCommandQueues, CommandQueue** commandQueues, Device** device)
-    {
-        D3D12Device* d3d12device = new D3D12Device;
-        D3D12CommandQueue* d3d12queues = new D3D12CommandQueue[numCommandQueues];
-        D3D12_FEATURE_DATA_D3D12_OPTIONS12 opt;
-        opt.EnhancedBarriersSupported = true;
-        HRESULT res = D3D12CreateDevice((IUnknown*)PhysicalDevice->ID, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(((ID3D12Device10**)&d3d12device->ID)));
-        ((ID3D12Device10*)d3d12device->ID)->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &opt, sizeof(opt));
-        *device = d3d12device;
-        for (int i = 0; i < numCommandQueues; i++)
-        {
-            D3D12_COMMAND_QUEUE_DESC desc;
-            desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-            desc.NodeMask = 0;
-            desc.Priority = commandQueueInfos[i].Priority < 1.f ? D3D12_COMMAND_QUEUE_PRIORITY_NORMAL : D3D12_COMMAND_QUEUE_PRIORITY_HIGH;
-            desc.Type = D3D12CmdListType(commandQueueInfos[i].CommandListType);
-            ((ID3D12Device*)d3d12device->ID)->CreateCommandQueue(&desc, IID_PPV_ARGS(((ID3D12CommandQueue**)&d3d12queues[i].ID)));
-            commandQueues[i] = &d3d12queues[i];
-        }
-        return res;
     }
     RESULT Device::CreateCommandAllocator(CommandListType type,CommandAllocator** pAllocator)
     {
@@ -90,7 +93,7 @@ namespace RHI
         for (UINT i = 0; i < desc->numPoolSizes; i++)
             dsDesc.NumDescriptors += desc->poolSizes[i].numDescriptors;
         dsDesc.NodeMask = 0;
-        dsDesc.Flags = desc->poolSizes->type == DescriptorType::RTV || desc->poolSizes->type == DescriptorType::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        dsDesc.Flags = desc->poolSizes->type == DescriptorClass::RTV || desc->poolSizes->type == DescriptorClass::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dsDesc.Type = D3D12DescriptorHeapType(desc->poolSizes->type);
         ((ID3D12Device*)ID)->CreateDescriptorHeap(&dsDesc, IID_PPV_ARGS(((ID3D12DescriptorHeap**)&d3d12heap->ID)));
         *descriptorHeap = d3d12heap;
@@ -119,14 +122,14 @@ namespace RHI
         {
             D3D12_CPU_DESCRIPTOR_HANDLE handle;
             handle.ptr = ((D3D12DescriptorSet*)sets)[0].start.val + (desc[i].binding * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
-            if (desc[i].type == DescriptorType::CBV)
+            if (desc[i].type == DescriptorClass::CBV)
             {
                 D3D12_CONSTANT_BUFFER_VIEW_DESC cbdesc;
                 cbdesc.BufferLocation = ((ID3D12Resource*)desc[i].bufferInfos->buffer->ID)->GetGPUVirtualAddress() + (desc[i].bufferInfos->offset);
                 cbdesc.SizeInBytes = desc[i].bufferInfos->range;
                 ((ID3D12Device*)ID)->CreateConstantBufferView(&cbdesc, handle);
             }
-            else if (desc[i].type == DescriptorType::SRV)
+            else if (desc[i].type == DescriptorClass::SRV)
             {
                 D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
                 srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -151,7 +154,7 @@ namespace RHI
         ((ID3D12Device*)ID)->CreateDepthStencilView((ID3D12Resource*)texture->ID, nullptr, {heapHandle.val});//todo
         return RESULT();
     }
-    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
+    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorClass type)
     {
         return ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12DescriptorHeapType(type));
     }
@@ -428,17 +431,17 @@ namespace RHI
         *heap = d3d12Heap;
         return 0;
     }
-    D3D12_DESCRIPTOR_RANGE_TYPE RangeType(DescriptorType type)
+    D3D12_DESCRIPTOR_RANGE_TYPE RangeType(DescriptorClass type)
     {
         switch (type)
         {
-        case RHI::DescriptorType::CBV: return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+        case RHI::DescriptorClass::CBV: return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
             break;
-        case RHI::DescriptorType::SRV: return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        case RHI::DescriptorClass::SRV: return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             break;
-        case RHI::DescriptorType::UAV:return D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        case RHI::DescriptorClass::UAV:return D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
             break;
-        case RHI::DescriptorType::Sampler: return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        case RHI::DescriptorClass::Sampler: return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
             break;
         default:
             break;

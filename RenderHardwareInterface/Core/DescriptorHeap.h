@@ -1,7 +1,7 @@
 #pragma once
-#include "Object.h"
 #include "Buffer.h"
 #include "FormatsAndTypes.h"
+#include "Object.h"
 #include "Texture.h"
 namespace RHI
 {
@@ -22,6 +22,11 @@ namespace RHI
 	{
 	protected:
 		DECL_CLASS_CONSTRUCTORS(DescriptorSet);
+	};
+	class RHI_API DynamicDescriptor : public Object
+	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(DynamicDescriptor);
 	};
 	struct DescriptorBufferInfo
 	{

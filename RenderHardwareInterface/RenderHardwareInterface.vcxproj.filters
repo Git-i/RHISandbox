@@ -87,6 +87,9 @@
     <ClInclude Include="Core\Heap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Core\ShaderReflect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -177,6 +180,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Core\Direct3D12\Buffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vulkan\ShaderReflect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vendor\spirv_reflect\spirv_reflect.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

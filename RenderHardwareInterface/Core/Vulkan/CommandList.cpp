@@ -2,6 +2,7 @@
 #include "../CommandList.h"
 #include "volk.h"
 #include "VulkanSpecific.h"
+#include <stdarg.h>
 namespace RHI
 {
     static VkAttachmentLoadOp VulkanLoadOp(LoadOp op)
@@ -33,9 +34,10 @@ namespace RHI
         Info.commandPool = (VkCommandPool)allocator->ID;
         Info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         Info.commandBufferCount = 1;
-        vkFreeCommandBuffers((VkDevice)Device_ID, (VkCommandPool)(((vGraphicsCommandList*)this)->m_allocator), 1, (VkCommandBuffer*)&ID);
-        vkAllocateCommandBuffers((VkDevice)Device_ID, &Info, (VkCommandBuffer*)&ID);
-        ((vGraphicsCommandList*)this)->m_allocator = allocator->ID;
+        //vkFreeCommandBuffers((VkDevice)Device_ID, (VkCommandPool)(((vGraphicsCommandList*)this)->m_allocator), 1, (VkCommandBuffer*)&ID);
+        //vkResetCommandBuffer((VkCommandBuffer)ID, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        vkAllocateCommandBuffers((VkDevice)((vDevice*)device)->ID, &Info, (VkCommandBuffer*)&ID);
+        ((vCommandAllocator*)allocator)->m_pools.push_back(ID);
         return vkBeginCommandBuffer((VkCommandBuffer)ID, &bufferBeginInfo);
     }
     RESULT GraphicsCommandList::PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* bufferBarrier,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers)
@@ -172,7 +174,7 @@ namespace RHI
         vkCmdDraw((VkCommandBuffer)ID, numVertices, numInstances, firstVertex, firstIndex);
         return RESULT();
     }
-    RESULT GraphicsCommandList::BindVertexBuffers(uint32_t startSlot, uint32_t numBuffers, Internal_ID* buffers)
+    RESULT GraphicsCommandList::BindVertexBuffers(uint32_t startSlot, uint32_t numBuffers, const Internal_ID* buffers)
     {
         VkDeviceSize l = 0;
         vkCmdBindVertexBuffers((VkCommandBuffer)ID, startSlot, numBuffers, (VkBuffer*)buffers, &l);
@@ -181,6 +183,14 @@ namespace RHI
     RESULT GraphicsCommandList::SetRootSignature(RootSignature* rs)
     {
         return RESULT();
+        
+    }
+    RESULT GraphicsCommandList::BindDynamicDescriptor(RootSignature* rs, const DynamicDescriptor* set, std::uint32_t rootParamIndex, std::uint32_t offset)
+    {
+        VkDescriptorSet sets;
+        sets = (VkDescriptorSet)set->ID;
+        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, rootParamIndex, 1, &sets,1,&offset);
+        return 0;
     }
     RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
     {
@@ -193,9 +203,9 @@ namespace RHI
     {
         return 0;
     }
-    RESULT GraphicsCommandList::BindIndexBuffer(Buffer* buffer, uint32_t offset)
+    RESULT GraphicsCommandList::BindIndexBuffer(const Buffer* buffer, uint32_t offset)
     {
-        vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, VK_INDEX_TYPE_UINT32);
         return RESULT();
     }
     RESULT GraphicsCommandList::DrawIndexed(uint32_t IndexCount, uint32_t InstanceCount, uint32_t startIndexLocation, uint32_t startVertexLocation, uint32_t startInstanceLocation)
@@ -212,12 +222,12 @@ namespace RHI
         vkCmdCopyBuffer((VkCommandBuffer)ID, (VkBuffer)srcBuffer->ID, (VkBuffer)dstBuffer->ID, 1, &copy);
         return RESULT();
     }
-    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
+    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
     {
         VkBufferImageCopy copy{};
-        copy.bufferImageHeight = srcHeight;
+        copy.bufferImageHeight = 0;
         copy.bufferOffset = srcOffset;
-        copy.bufferRowLength = srcRowWidth;
+        copy.bufferRowLength = 0;
         copy.imageExtent = { imgSize.width, imgSize.height, imgSize.depth };
         copy.imageOffset = { imgOffset.width, imgOffset.height, imgOffset.depth };
         copy.imageSubresource.aspectMask = (VkImageAspectFlags)dstRange.imageAspect;

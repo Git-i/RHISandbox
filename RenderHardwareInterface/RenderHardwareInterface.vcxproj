@@ -182,7 +182,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);C:\VulkanSDK\1.3.239.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)vendor\VulkanMemoryAllocator\include;C:\VulkanSDK\1.3.239.0\Include;$(ProjectDir);$(ProjectDir)vendor\spirv_reflect;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -230,6 +230,7 @@
     <ClInclude Include="Core\PhysicalDevice.h" />
     <ClInclude Include="Core\PipelineStateObject.h" />
     <ClInclude Include="Core\RootSignature.h" />
+    <ClInclude Include="Core\ShaderReflect.h" />
     <ClInclude Include="Core\Surface.h" />
     <ClInclude Include="Core\SwapChain.h" />
     <ClInclude Include="Core\Texture.h" />
@@ -322,6 +323,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug-Direct3D12|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release-Direct3D12|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="Core\Vulkan\ShaderReflect.cpp" />
     <ClCompile Include="Core\Vulkan\volk.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug-Vulkan|x64'">NotUsing</PrecompiledHeader>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug-Vulkan|x64'">false</ExcludedFromBuild>
@@ -364,13 +366,16 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release-Direct3D12|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release-Direct3D12|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="vendor\spirv_reflect\spirv_reflect.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug-Vulkan|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Core\cpp.hint" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
+  <ImportGroup Label="ExtensionTargets" Condition="'$(Configuration)'=='Debug-Direct3D12'">
     <Import Project="..\packages\Microsoft.Direct3D.D3D12.1.611.2\build\native\Microsoft.Direct3D.D3D12.targets" Condition="Exists('..\packages\Microsoft.Direct3D.D3D12.1.611.2\build\native\Microsoft.Direct3D.D3D12.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

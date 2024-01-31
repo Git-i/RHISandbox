@@ -2,6 +2,8 @@
 #include "Core.h"
 #include "../FormatsAndTypes.h"
 #include "include\d3d12.h"
+#include <d3d12shader.h>
+#include <d3dcompiler.h>
 #include "../DescriptorHeap.h"
 #include "../Instance.h"
 #include "../Device.h"
@@ -18,7 +20,6 @@ namespace RHI
 
     class D3D12Device : public Device
     {
-
     };
     class D3D12CommandQueue : public CommandQueue
     {

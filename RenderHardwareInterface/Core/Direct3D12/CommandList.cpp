@@ -293,7 +293,7 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->DrawInstanced(numVertices, numInstances, firstVertex, firstInstance);
         return RESULT();
     }
-    RESULT GraphicsCommandList::BindVertexBuffers(uint32_t startSlot, uint32_t numBuffers, Internal_ID* buffers)
+    RESULT GraphicsCommandList::BindVertexBuffers(uint32_t startSlot, uint32_t numBuffers, const Internal_ID* buffers)
     {
         D3D12_VERTEX_BUFFER_VIEW views[5];
         for (int i = 0; i < numBuffers; i++)
@@ -375,5 +375,9 @@ namespace RHI
         pSrcCopy.PlacedFootprint.Footprint.RowPitch = 4 * imgSize.width;
         ((ID3D12GraphicsCommandList*)ID)->CopyTextureRegion(&pDstCopy, imgOffset.width,imgOffset.height, imgOffset.depth, &pSrcCopy, &size);
         return 0;
+    }
+    RESULT GraphicsCommandList::BindDynamicDescriptor(RootSignature* rs, const DynamicDescriptor* set, std::uint32_t rootParamIndex, std::uint32_t offset)
+    {
+        return RESULT();
     }
 }

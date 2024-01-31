@@ -1,6 +1,6 @@
 #pragma once
 #include "Core.h"
-#include "Core/PhysicalDevice.h"
+#include "PhysicalDevice.h"
 #include "SwapChain.h"
 #include "Device.h"
 namespace RHI
@@ -10,9 +10,14 @@ namespace RHI
 	protected:
 		DECL_CLASS_CONSTRUCTORS(Instance);
 	public:
-		static RESULT Create(Instance** instance);
+		uint32_t GetNumPhysicalDevices();
+		RESULT GetAllPhysicalDevices(PhysicalDevice** devices);
 		RESULT GetPhysicalDevice(int id, PhysicalDevice** device);
 		RESULT CreateSwapChain(SwapChainDesc* desc, PhysicalDevice* device, Device* pDevice, CommandQueue* pCommandQueue, SwapChain** pSwapChain);
 	};
 
+}
+extern "C"
+{
+	RESULT RHI_API RHICreateInstance(RHI::Instance**instance);
 }

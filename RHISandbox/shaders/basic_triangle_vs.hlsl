@@ -4,15 +4,15 @@ cbuffer buf :register(b0)
 };
 cbuffer buf2 :register(b1)
 {
-    float4x4 view;
+    float4x4 viewa;
 }
-cbuffer buf3 :register(b0, space1)
+cbuffer buafzasd3 :register(b0, space1)
 {
     float4x4 projection;
 };
-cbuffer buf2 :register(b1, space1)
+cbuffer buf4 :register(b2, space1)
 {
-    float4x4 _pad;
+    float4x4 padasda;
 }
 
 struct VS_OUT
@@ -32,9 +32,10 @@ VS_OUT main(float3 pos : SEM0, float3 color : SEM1)
     VS_OUT vso;
     vso.position = float4(pos, 1.0);
     vso.position = mul(vso.position, model);
-    vso.position = mul(vso.position, view);
+    vso.position = mul(vso.position, viewa);
     vso.position = mul(vso.position, projection);
-    
+    float4 lol = mul(vso.position, padasda);
+    vso.color = lol.xyz;
     vso.color = color;
     return vso;
 }

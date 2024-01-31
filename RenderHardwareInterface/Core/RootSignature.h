@@ -8,10 +8,23 @@ namespace RHI
 	protected:
 		DECL_CLASS_CONSTRUCTORS(RootSignature);
 	};
+	enum class ShaderStage
+	{
+		None = 0,
+		Vertex = 1,
+		Hull = 2,
+		Domain = 4,
+		Geometry = 8,
+		Pixel = 16,
+		Compute = 32,
+		AllGraphics = 31,
+	};
+	DEFINE_ENUM_FLAG_OPERATORS(ShaderStage);
 	struct DescriptorRange
 	{
 		std::uint32_t numDescriptors;
 		std::uint32_t BaseShaderRegister;
+		ShaderStage stage;
 		DescriptorType type;
 	};
 	struct DescriptorTable
@@ -19,13 +32,18 @@ namespace RHI
 		std::uint32_t numDescriptorRanges;
 		DescriptorRange* ranges;
 	};
+	struct DynamicDescriptorDesc
+	{
+		DescriptorType type;
+		ShaderStage stage;
+	};
 	struct PushConstant
 	{
 		std::uint32_t numConstants;
 	};
 	enum class RootParameterType
 	{
-		DescriptorTable, PushConstant
+		DescriptorTable, PushConstant, DynamicDescriptor
 	};
 	struct RHI_API RootParameterDesc
 	{
@@ -33,6 +51,7 @@ namespace RHI
 		union {
 			DescriptorTable descriptorTable;
 			PushConstant pushConstant;
+			DynamicDescriptorDesc dynamicDescriptor;
 		};
 	};
 	struct RHI_API RootSignatureDesc

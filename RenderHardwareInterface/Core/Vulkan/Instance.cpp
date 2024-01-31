@@ -5,26 +5,29 @@
 #include "VulkanSpecific.h"
 #include <vector>
 #include <iostream>
-namespace RHI
+extern "C"
 {
-	RESULT Instance::Create(Instance** instance)
+	RESULT RHI_API RHICreateInstance(RHI::Instance** instance)
 	{
-		vInstance* vinstance = new vInstance;
+		RHI::vInstance* vinstance = new RHI::vInstance;
 		*instance = vinstance;
 		volkInitialize();
 		VkInstanceCreateInfo info = {};
 		const char* layerName = "VK_LAYER_KHRONOS_validation";
-		const char* extensionName[2] = { "VK_KHR_surface", "VK_KHR_win32_surface"};
+		const char* extensionName[2] = { "VK_KHR_surface", "VK_KHR_win32_surface" };
 		info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		info.pNext = nullptr;
 		info.enabledLayerCount = 1;
 		info.ppEnabledLayerNames = &layerName;
 		info.enabledExtensionCount = 2;
 		info.ppEnabledExtensionNames = extensionName;
-		VkResult res =  vkCreateInstance(&info, nullptr, (VkInstance*)&vinstance->ID);
+		VkResult res = vkCreateInstance(&info, nullptr, (VkInstance*)&vinstance->ID);
 		volkLoadInstance((VkInstance)vinstance->ID);
 		return res;
 	}
+}
+namespace RHI
+{
 	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice** device)
 	{
 		vPhysicalDevice* vdevice = new vPhysicalDevice;
@@ -78,8 +81,8 @@ namespace RHI
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		vkCreateSemaphore((VkDevice)Device->ID, &semaphoreInfo, nullptr, (VkSemaphore*)&vswapChain->present_semaphore);
-		vswapChain->Device_ID = Device->ID;
-		vswapChain->PrivateDataSlot = 0;
+		vswapChain->device = Device;
+		Device->Hold();
 		vkGetDeviceQueue((VkDevice)Device->ID, indices.presentIndex, 0, (VkQueue*)&vswapChain->PresentQueue_ID);
 		*pSwapChain = vswapChain;
 		return 0;

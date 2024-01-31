@@ -3,33 +3,141 @@
 #include "../../Error.h"
 #include "VulkanSpecific.h"
 #include "volk.h"
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 1
+#include "vk_mem_alloc.h"
 #include <iostream>
 #include <fstream>
-#include <csetjmp>
+static void SelectHeapIndices(RHI::vDevice* device)
+{
+    std::uint32_t DefaultHeap = UINT32_MAX;
+    std::uint32_t UploadHeap = UINT32_MAX;
+    std::uint32_t ReadbackHeap = UINT32_MAX;
+    int iterator = 0;
+    for (auto& prop : device->HeapProps)
+    {
+        if (prop.memoryLevel ==  RHI::MemoryLevel::DedicatedRAM && iterator < DefaultHeap) DefaultHeap = iterator;
+        if (prop.pageProperty == RHI::CPUPageProperty::WriteCached) UploadHeap = iterator;
+        if (prop.pageProperty == RHI::CPUPageProperty::WriteCombined && iterator < UploadHeap) UploadHeap = iterator;
+        if (prop.pageProperty == RHI::CPUPageProperty::WriteCombined || prop.pageProperty == RHI::CPUPageProperty::WriteCached && iterator < ReadbackHeap) ReadbackHeap = iterator;
+        iterator++;
+    }
+    device->DefaultHeapIndex = DefaultHeap;
+    device->UploadHeapIndex = UploadHeap;
+    device->ReadbackHeapIndex = ReadbackHeap;
+}
+extern "C"
+{
+    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device)
+    {
+        VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
+
+        VkPhysicalDeviceMemoryProperties memProps;
+        RHI::vDevice* vdevice = new RHI::vDevice;
+        RHI::vCommandQueue* vqueue = new RHI::vCommandQueue[numCommandQueues];
+        vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProps);
+        for (int i = 0; i < memProps.memoryTypeCount; i++)
+        {
+            VkFlags flags = memProps.memoryTypes[i].propertyFlags;
+            RHI::HeapProperties prop;
+            prop.type = RHI::HeapType::Custom;
+            prop.memoryLevel = (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ? RHI::MemoryLevel::DedicatedRAM : RHI::MemoryLevel::SharedRAM;
+            RHI::CPUPageProperty CPUprop;
+            if (flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) CPUprop = RHI::CPUPageProperty::WriteCached;
+            else if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) CPUprop = RHI::CPUPageProperty::WriteCombined;
+            else CPUprop = RHI::CPUPageProperty::NonVisible;
+            prop.pageProperty = CPUprop;
+            vdevice->HeapProps.emplace_back(prop);
+        }
+        SelectHeapIndices(vdevice);
+        vdevice->indices = findQueueFamilyIndices(PhysicalDevice);
+
+
+        std::vector<VkDeviceQueueCreateInfo> queueInfos(numCommandQueues);
+        for (int i = 0; i < numCommandQueues; i++)
+        {
+            queueInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueInfos[i].pNext = NULL;
+            float queuePriority = commandQueueInfos[i].Priority;
+            queueInfos[i].pQueuePriorities = &queuePriority;
+            queueInfos[i].queueCount = 1;
+            std::uint32_t index = 0;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Direct) index = vdevice->indices.graphicsIndex;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Compute) index = vdevice->indices.computeIndex;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Copy) index = vdevice->indices.copyIndex;
+            queueInfos[i].queueFamilyIndex = index;
+            queueInfos[i].flags = 0;
+        }
+        if (vdevice->indices.graphicsIndex != vdevice->indices.presentIndex)
+        {
+            VkDeviceQueueCreateInfo info = {};
+            info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            float queuePriority = 0.f;
+            info.pQueuePriorities = &queuePriority;
+            info.queueCount = 1;
+            info.queueFamilyIndex = vdevice->indices.presentIndex;
+            info.flags = 0;
+            queueInfos.push_back(info);
+        }
+        VkPhysicalDeviceFeatures deviceFeatures{};
+        deviceFeatures.shaderStorageImageReadWithoutFormat = VK_TRUE;
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
+        dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+        dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
+
+        VkPhysicalDeviceTimelineSemaphoreFeatures semaphoreFeatures{};
+        semaphoreFeatures.timelineSemaphore = VK_TRUE;
+        semaphoreFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+        semaphoreFeatures.pNext = &dynamicRenderingFeatures;
+
+        VkDeviceCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        info.pNext = &semaphoreFeatures;
+        info.pQueueCreateInfos = queueInfos.data();
+        info.queueCreateInfoCount = queueInfos.size();
+        info.pEnabledFeatures = &deviceFeatures;
+        const char* ext_name[] =
+        {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+            VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+            VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
+            VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
+            VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+            VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+            VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+        };
+        info.enabledExtensionCount = ARRAYSIZE(ext_name);
+        info.ppEnabledExtensionNames = ext_name;
+        VkResult res = vkCreateDevice(vkPhysicalDevice, &info, nullptr, (VkDevice*)&vdevice->ID);
+
+       
+        for (int i = 0; i < numCommandQueues; i++)
+        {
+            vkGetDeviceQueue((VkDevice)vdevice->ID, queueInfos[i].queueFamilyIndex, 0, (VkQueue*)&vqueue[i].ID);
+            vqueue[i].device = vdevice;
+            commandQueues[i] = &vqueue[i];
+        }
+        //initialize VMA
+        VmaAllocatorCreateInfo vmaInfo{};
+        vmaInfo.device = (VkDevice)vdevice->ID;
+        vmaInfo.flags = 0; //probably have error checking
+        vmaInfo.instance = (VkInstance)instance;
+        vmaInfo.physicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
+        vmaInfo.pVulkanFunctions = nullptr;
+        
+        vmaCreateAllocator(&vmaInfo, &vdevice->allocator);
+        RHI::vma_allocator = vdevice->allocator;
+        *device = vdevice;
+        return res;
+    }
+}
 namespace RHI
 {   
     Default_t Default = {};
     Zero_t Zero = {};
-    PFN_vkSetPrivateDataEXT SetPrivateData = nullptr;
-    PFN_vkGetPrivateDataEXT GetPrivateData = nullptr;
-    static void SelectHeapIndices(vDevice* device)
-    {
-        std::uint32_t DefaultHeap = UINT32_MAX;
-        std::uint32_t UploadHeap = UINT32_MAX;
-        std::uint32_t ReadbackHeap = UINT32_MAX;
-        int iterator = 0;
-        for (auto& prop : device->HeapProps)
-        {
-            if (prop.memoryLevel == MemoryLevel::DedicatedRAM && iterator < DefaultHeap) DefaultHeap = iterator;
-            if (prop.pageProperty == CPUPageProperty::WriteCached) UploadHeap = iterator;
-            if (prop.pageProperty == CPUPageProperty::WriteCombined && iterator < UploadHeap) UploadHeap = iterator;
-            if (prop.pageProperty == CPUPageProperty::WriteCombined || prop.pageProperty == CPUPageProperty::WriteCached && iterator < ReadbackHeap) ReadbackHeap = iterator;
-            iterator++;
-        }
-        device->DefaultHeapIndex = DefaultHeap;
-        device->UploadHeapIndex = UploadHeap;
-        device->ReadbackHeapIndex = ReadbackHeap;
-    }
+    VmaAllocator RHI::vma_allocator = nullptr;
     static VkResult CreateShaderModule(const char* filename, VkPipelineShaderStageCreateInfo* shader_info, VkShaderStageFlagBits stage,int index, VkShaderModule* module,Internal_ID device)
     {
         char name[256];
@@ -78,116 +186,13 @@ namespace RHI
         {
             flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         }
+        if ((usage & RHI::BufferUsage::StructuredBuffer) != BufferUsage::None)
+        {
+            flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        }
         return flags;
     }
-    RESULT Device::Create(PhysicalDevice* PhysicalDevice, CommandQueueDesc const* commandQueueInfos, int numCommandQueues, CommandQueue** commandQueues, Device** device)
-    {
-        VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
-        
-        VkPhysicalDeviceMemoryProperties memProps;
-        vDevice* vdevice = new vDevice;
-        vCommandQueue* vqueue = new vCommandQueue[numCommandQueues];
-        vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProps);
-        for (int i = 0; i < memProps.memoryTypeCount; i++)
-        {
-            VkFlags flags = memProps.memoryTypes[i].propertyFlags;
-            HeapProperties prop;
-            prop.type = HeapType::Custom;
-            prop.memoryLevel = (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ? MemoryLevel::DedicatedRAM : MemoryLevel::SharedRAM;
-            RHI::CPUPageProperty CPUprop;
-            if (flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) CPUprop = RHI::CPUPageProperty::WriteCached;
-            else if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) CPUprop = RHI::CPUPageProperty::WriteCombined;
-            else CPUprop = RHI::CPUPageProperty::NonVisible;
-            prop.pageProperty = CPUprop;
-            vdevice->HeapProps.emplace_back(prop);
-        }
-        SelectHeapIndices(vdevice);
-        vdevice->indices = findQueueFamilyIndices(PhysicalDevice);
-
-        
-        std::vector<VkDeviceQueueCreateInfo> queueInfos(numCommandQueues);
-        for (int i = 0; i < numCommandQueues; i++)
-        {
-            queueInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueInfos[i].pNext = NULL;
-            float queuePriority = commandQueueInfos[i].Priority;
-            queueInfos[i].pQueuePriorities = &queuePriority;
-            queueInfos[i].queueCount = 1;
-            std::uint32_t index = 0;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Direct) index = vdevice->indices.graphicsIndex;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Compute) index = vdevice->indices.computeIndex;
-            if (commandQueueInfos[i].CommandListType == CommandListType::Copy) index = vdevice->indices.copyIndex;
-            queueInfos[i].queueFamilyIndex = index;
-            queueInfos[i].flags = 0;
-        }
-        if (vdevice->indices.graphicsIndex != vdevice->indices.presentIndex)
-        {
-            VkDeviceQueueCreateInfo info = {};
-            info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            float queuePriority = 0.f;
-            info.pQueuePriorities = &queuePriority;
-            info.queueCount = 1;
-            info.queueFamilyIndex = vdevice->indices.presentIndex;
-            info.flags = 0;
-            queueInfos.push_back(info);
-        }
-        VkPhysicalDeviceFeatures deviceFeatures{};
-        deviceFeatures.shaderStorageImageReadWithoutFormat = VK_TRUE;
-        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
-        dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-        dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
-
-        VkPhysicalDeviceTimelineSemaphoreFeatures semaphoreFeatures{};
-        semaphoreFeatures.timelineSemaphore = VK_TRUE;
-        semaphoreFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-        semaphoreFeatures.pNext = &dynamicRenderingFeatures;
-
-        VkPhysicalDevicePrivateDataFeatures features{};
-        features.privateData = VK_TRUE;
-        features.pNext = &semaphoreFeatures;
-        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES;
-
-        VkDeviceCreateInfo info = {};
-        info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        info.pNext = &features;
-        info.pQueueCreateInfos = queueInfos.data();
-        info.queueCreateInfoCount = queueInfos.size();
-        info.pEnabledFeatures = &deviceFeatures;
-        const char* ext_name[] = 
-        {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
-            VK_EXT_PRIVATE_DATA_EXTENSION_NAME, 
-            VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, 
-            VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, 
-            VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
-            VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
-            VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
-            VK_KHR_MAINTENANCE1_EXTENSION_NAME,
-            VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
-            VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME
-        };
-        info.enabledExtensionCount = ARRAYSIZE(ext_name);
-        info.ppEnabledExtensionNames = ext_name;
-        VkResult res = vkCreateDevice(vkPhysicalDevice, &info, nullptr, (VkDevice*)&vdevice->ID);
-        
-        typedef  VkResult(VKAPI_PTR * PFN_vkCreatePrivateDataSlotEXT)(VkDevice, const VkPrivateDataSlotCreateInfo*, const VkAllocationCallbacks*, VkPrivateDataSlot*);
-        VkPrivateDataSlotCreateInfo Slotinfo = {};
-        Slotinfo.sType = VK_STRUCTURE_TYPE_PRIVATE_DATA_SLOT_CREATE_INFO;
-        PFN_vkCreatePrivateDataSlotEXT fn = (PFN_vkCreatePrivateDataSlotEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkCreatePrivateDataSlotEXT");
-        SetPrivateData = (PFN_vkSetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkSetPrivateDataEXT");
-        GetPrivateData = (PFN_vkGetPrivateDataEXT)vkGetDeviceProcAddr((VkDevice)vdevice->ID, "vkGetPrivateDataEXT");
-        vkCreatePrivateDataSlotEXT((VkDevice)vdevice->ID, &Slotinfo, nullptr, &vdevice->slot);
-        for (int i = 0; i < numCommandQueues; i++)
-        {
-            vkGetDeviceQueue((VkDevice)vdevice->ID, queueInfos[i].queueFamilyIndex, 0, (VkQueue*)&vqueue[i].ID);
-            vqueue[i].Device_ID = vdevice->ID;
-            vqueue[i].PrivateDataSlot = vdevice->slot;
-            commandQueues[i] = &vqueue[i];
-        }
-        *device = vdevice;
-        return res;
-    }
-    RESULT Device::CreateCommandAllocator(CommandListType type,CommandAllocator** pAllocator)
+    RESULT Device::CreateCommandAllocators(CommandListType type,uint32_t count,CommandAllocator** pAllocator)
     {
         vCommandAllocator* vallocator = new vCommandAllocator;
         std::uint32_t index = 0;
@@ -198,13 +203,17 @@ namespace RHI
         info.pNext = NULL;
         info.queueFamilyIndex = index;
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&vallocator->ID);
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_UNKNOWN, (std::uint64_t)vallocator->ID, ((vDevice*)this)->slot, 1);
-        vallocator->PrivateDataSlot = ((vDevice*)this)->slot;
-        vallocator->Device_ID = ID;
-        *pAllocator = vallocator;
-        return 0;
+        info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT; //to align with d3d's model
+        VkResult res=VK_SUCCESS;
+        for (uint32_t i = 0; i < count; i++)
+        {
+            res = vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&vallocator->ID);
+            if (res != VK_SUCCESS) break;
+            vallocator->device = this;
+            Hold();
+            pAllocator[i] = vallocator;
+        }
+        return res;
     }
     template <> RESULT Device::CreateCommandList(CommandListType type, CommandAllocator* allocator, GraphicsCommandList** pCommandList)
     {
@@ -217,26 +226,27 @@ namespace RHI
         VkCommandBuffer commandBuffer;
         VkResult res = vkAllocateCommandBuffers((VkDevice)ID, &Info, &commandBuffer);
         vCommandlist->ID = commandBuffer;
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_COMMAND_BUFFER, (std::uint64_t)vCommandlist->ID, ((vDevice*)this)->slot, 1);
-        vCommandlist->PrivateDataSlot = ((vDevice*)this)->slot;
-        vCommandlist->Device_ID = ID;
-        vCommandlist->m_allocator = allocator->ID;
+        vCommandlist->device = this;
         *pCommandList = vCommandlist;
+        Hold();
+        ((vCommandAllocator*)allocator)->m_pools.push_back(vCommandlist->ID);
         return 0;
     }
     VkDescriptorType DescType(RHI::DescriptorType type)
     {
         switch (type)
         {
-        case RHI::DescriptorType::CBV: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        case RHI::DescriptorType::SampledTexture: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             break;
-        case RHI::DescriptorType::RTV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        case RHI::DescriptorType::ConstantBuffer: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             break;
-        case RHI::DescriptorType::DSV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        case RHI::DescriptorType::StructuredBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             break;
-        case RHI::DescriptorType::SRV: return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        case RHI::DescriptorType::ConstantBufferDynamic: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
             break;
-        case RHI::DescriptorType::UAV: return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        case RHI::DescriptorType::StructuredBufferDynamic: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+            break;
+        case RHI::DescriptorType::Sampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
             break;
         default:
             break;
@@ -308,7 +318,7 @@ namespace RHI
         info.format = VK_FORMAT_D32_SFLOAT;
         return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
     }
-    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
+    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorClass type)
     {
         return sizeof(VkImageView);
     }
@@ -339,13 +349,12 @@ namespace RHI
         VkSemaphore timelineSemaphore;
         VkResult res = vkCreateSemaphore((VkDevice)ID, &createInfo, NULL, &timelineSemaphore);
         vfence->ID = timelineSemaphore;
-        SetPrivateData((VkDevice)ID, VkObjectType::VK_OBJECT_TYPE_SEMAPHORE, (std::uint64_t)vfence->ID, ((vDevice*)this)->slot, 1);
-        vfence->PrivateDataSlot = ((vDevice*)this)->slot;
-        vfence->Device_ID = ID;
+        vfence->device = this;
+        Hold();
         *fence = vfence;
         return res;
     }
-    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* automatic_info, std::uint64_t offset, ResourceType type)
     {
         vBuffer* vbuffer = new vBuffer;
         VkBufferCreateInfo info{};
@@ -353,10 +362,23 @@ namespace RHI
         info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         info.size = desc->size;
         info.usage = VkBufferUsage(desc->usage);
+        vbuffer->device = this;
+        if (type == ResourceType::Automatic)
+        {
+            VmaAllocationCreateInfo allocCreateInfo{};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = 0;
+            allocCreateInfo.flags |=
+                (automatic_info->access_mode == AutomaticAllocationCPUAccessMode::Random) ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT : 0;
+            allocCreateInfo.flags |=
+                (automatic_info->access_mode == AutomaticAllocationCPUAccessMode::Sequential) ? VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT : 0;
+            RESULT res = vmaCreateBuffer(((vDevice*)this)->allocator, &info, &allocCreateInfo, (VkBuffer*)&vbuffer->ID, &vbuffer->vma_ID, nullptr);
+            *buffer = vbuffer;
+            Hold();
+            return res;
+        }
         vbuffer->offset = offset;
         vbuffer->size = desc->size;
-        vbuffer->Device_ID = ID;
-        vbuffer->PrivateDataSlot = ((vDevice*)this)->slot;
         vbuffer->heap = heap->ID;
         vkCreateBuffer((VkDevice)ID, &info, nullptr, (VkBuffer*)&vbuffer->ID);
         if (type == ResourceType::Commited)
@@ -374,6 +396,7 @@ namespace RHI
         {
             vkBindBufferMemory((VkDevice)ID, (VkBuffer)vbuffer->ID, (VkDeviceMemory)heap->ID, offset);
         }
+        Hold();
         *buffer = vbuffer;
         return RESULT();
     }
@@ -435,7 +458,35 @@ namespace RHI
         *heap = vheap;
         return vkAllocateMemory((VkDevice)ID, &allocInfo, nullptr, (VkDeviceMemory*)&vheap->ID);
     }
-    
+    VkShaderStageFlags VkShaderStage(ShaderStage stage)
+    {
+        VkShaderStageFlags flags = 0;
+        if ((stage & ShaderStage::Vertex) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_VERTEX_BIT;
+        }
+        if ((stage & ShaderStage::Pixel) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
+        if ((stage & ShaderStage::Geometry) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        }
+        if ((stage & ShaderStage::Hull) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        }
+        if ((stage & ShaderStage::Domain) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        }
+        if ((stage & ShaderStage::Compute) != ShaderStage::None)
+        {
+            flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+        return flags;
+    }
     RESULT Device::CreateRootSignature(RootSignatureDesc* desc, RootSignature** rootSignature, DescriptorSetLayout** pSetLayouts)
     {
         vDescriptorSetLayout* vSetLayouts = new vDescriptorSetLayout[desc->numRootParameters];
@@ -446,6 +497,22 @@ namespace RHI
         uint32_t numLayouts = 0;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
         {
+            if (desc->rootParameters[i].type == RootParameterType::DynamicDescriptor)
+            {
+                GFX_ASSERT(desc->rootParameters[i].dynamicDescriptor.type == RHI::DescriptorType::ConstantBufferDynamic
+                || desc->rootParameters[i].dynamicDescriptor.type == RHI::DescriptorType::StructuredBufferDynamic);
+                VkDescriptorSetLayoutBinding binding;
+                binding.binding = 0;
+                binding.descriptorCount = 1;
+                binding.descriptorType = DescType(desc->rootParameters[i].dynamicDescriptor.type);
+                binding.pImmutableSamplers = nullptr;
+                binding.stageFlags = VkShaderStage(desc->rootParameters[i].dynamicDescriptor.stage);
+                layoutInfo[i].bindingCount = 1;
+                layoutInfo[i].pBindings = &binding;
+                layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
+                continue;
+            }
             VkDescriptorSetLayoutBinding LayoutBinding[5] = {};
             for (uint32_t j = 0; j < desc->rootParameters[i].descriptorTable.numDescriptorRanges; j++)
             {
@@ -453,7 +520,7 @@ namespace RHI
                 LayoutBinding[j].descriptorCount = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
                 LayoutBinding[j].descriptorType = DescType(desc->rootParameters[i].descriptorTable.ranges[j].type);
                 LayoutBinding[j].pImmutableSamplers = nullptr;
-                LayoutBinding[j].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+                LayoutBinding[j].stageFlags = VkShaderStage(desc->rootParameters[i].descriptorTable.ranges[j].stage);
                 numLayouts++;
             }
             layoutInfo[i].bindingCount = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
@@ -461,20 +528,74 @@ namespace RHI
             layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
             vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
             pSetLayouts[i] = &vSetLayouts[i];
-            vSetLayouts[i].Device_ID = ID;
-            vSetLayouts[i].PrivateDataSlot = ((vDevice*)this)->slot;
+            vSetLayouts[i].device = this;
         }
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = desc->numRootParameters;
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
         vkCreatePipelineLayout((VkDevice)ID, &pipelineLayoutInfo, nullptr, (VkPipelineLayout*)&vrootSignature->ID);
-        vrootSignature->Device_ID = ID;
-        vrootSignature->PrivateDataSlot = ((vDevice*)this)->slot;
+        vrootSignature->device = this;
         *rootSignature = vrootSignature;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
+        {
+            if (desc->rootParameters[i].type == RootParameterType::DynamicDescriptor)
+            {
+                vkDestroyDescriptorSetLayout((VkDevice)ID, descriptorSetLayout[i], nullptr);
+                continue;
+            }
             vSetLayouts[i].ID = descriptorSetLayout[i];
+        }
         return RESULT();
+    }
+    const VkCompareOp vkCompareFunc(RHI::ComparisonFunc func)
+    {
+        switch (func)
+        {
+        case RHI::ComparisonFunc::Never: return VK_COMPARE_OP_NEVER;
+            break;
+        case RHI::ComparisonFunc::Less: return VK_COMPARE_OP_LESS;
+            break;
+        case RHI::ComparisonFunc::Equal: return VK_COMPARE_OP_EQUAL;
+            break;
+        case RHI::ComparisonFunc::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+            break;
+        case RHI::ComparisonFunc::Greater: return VK_COMPARE_OP_GREATER;
+            break;
+        case RHI::ComparisonFunc::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
+            break;
+        case RHI::ComparisonFunc::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+            break;
+        case RHI::ComparisonFunc::Always: return VK_COMPARE_OP_ALWAYS;
+            break;
+        default:
+            break;
+        }
+    }
+    const VkStencilOp vkStenOp(RHI::StencilOp op)
+    {
+        switch (op)
+        {
+        case RHI::StencilOp::Keep: return VK_STENCIL_OP_KEEP;
+            break;
+        case RHI::StencilOp::Zero: return VK_STENCIL_OP_ZERO;
+            break;
+        case RHI::StencilOp::Replace: return VK_STENCIL_OP_REPLACE;
+            break;
+        case RHI::StencilOp::IncrSat: return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+            break;
+        case RHI::StencilOp::DecrSat: return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+            break;
+        case RHI::StencilOp::Invert: return VK_STENCIL_OP_INVERT;
+            break;
+        case RHI::StencilOp::Incr: return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+            break;
+        case RHI::StencilOp::Decr: return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+            break;
+        default:
+            break;
+        }
     }
     RESULT Device::CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject** pPSO)
     {
@@ -533,17 +654,19 @@ namespace RHI
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = vkPrimitiveTopology(desc->topology);
+        inputAssembly.topology = vkPrimitiveTopology(desc->rasterizerMode.topology);
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        VkDynamicState dynamicStates[2] = {
+        VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+
         };
 
         VkPipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
+        dynamicState.dynamicStateCount = _ARRAYSIZE(dynamicStates);
         dynamicState.pDynamicStates = dynamicStates;
 
         VkPipelineViewportStateCreateInfo viewportState{};
@@ -596,9 +719,24 @@ namespace RHI
         colorBlending.blendConstants[3] = 0.0f; // Optional
         
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.depthTestEnable = desc->DepthEnabled;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; //todo
-        depthStencil.depthWriteEnable = true;
+        depthStencil.depthTestEnable = desc->depthStencilMode.DepthEnable;
+        depthStencil.depthCompareOp = vkCompareFunc(desc->depthStencilMode.DepthFunc);
+        depthStencil.depthWriteEnable = desc->depthStencilMode.DepthWriteMask == DepthWriteMask::All ? 1 : 0;
+        //todo depth bounds
+        depthStencil.flags = 0;
+        depthStencil.stencilTestEnable = desc->depthStencilMode.StencilEnable;
+        depthStencil.back.compareMask = desc->depthStencilMode.StencilReadMask;
+        depthStencil.back.writeMask = desc->depthStencilMode.StencilWriteMask;
+        depthStencil.back.compareOp = vkCompareFunc(desc->depthStencilMode.BackFace.Stencilfunc);
+        depthStencil.back.depthFailOp = vkStenOp(desc->depthStencilMode.BackFace.DepthfailOp);
+        depthStencil.back.failOp = vkStenOp(desc->depthStencilMode.BackFace.failOp);
+        depthStencil.back.passOp = vkStenOp(desc->depthStencilMode.BackFace.passOp);
+        depthStencil.front.compareMask = desc->depthStencilMode.StencilReadMask;
+        depthStencil.front.writeMask = desc->depthStencilMode.StencilWriteMask;
+        depthStencil.front.compareOp = vkCompareFunc(desc->depthStencilMode.FrontFace.Stencilfunc);
+        depthStencil.front.depthFailOp = vkStenOp(desc->depthStencilMode.FrontFace.DepthfailOp);
+        depthStencil.front.failOp = vkStenOp(desc->depthStencilMode.FrontFace.failOp);
+        depthStencil.front.passOp = vkStenOp(desc->depthStencilMode.FrontFace.passOp);
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
         VkPipelineRenderingCreateInfo pipelineRendereing{};
@@ -659,21 +797,25 @@ namespace RHI
     }
     RESULT Device::UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
     {
+        
         VkWriteDescriptorSet writes[5]{};
         VkDescriptorBufferInfo Binfo[5]{ };
         VkDescriptorImageInfo Iinfo[5]{ };
         VkImageView view[5]{};
         for(uint32_t i = 0; i < numDescs; i++)
         {
-            if (desc[i].type == RHI::DescriptorType::CBV)
+            switch (desc[i].type)
+            {
+            case(RHI::DescriptorType::ConstantBuffer):
             {
                 Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer->ID;
                 Binfo[i].offset = desc[i].bufferInfos->offset;
                 Binfo[i].range = desc[i].bufferInfos->range;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 writes[i].pBufferInfo = &Binfo[i];
+                break;
             }
-            if (desc[i].type == RHI::DescriptorType::SRV)
+            case(RHI::DescriptorType::SampledTexture):
             {
                 VkImageViewCreateInfo info{};
                 info.viewType = VK_IMAGE_VIEW_TYPE_2D; //todo
@@ -692,6 +834,17 @@ namespace RHI
                 Iinfo[i].sampler = nullptr;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                 writes[i].pImageInfo = &Iinfo[i];
+            }
+            case(RHI::DescriptorType::StructuredBuffer):
+            {
+                Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer->ID;
+                Binfo[i].offset = desc[i].bufferInfos->offset;
+                Binfo[i].range = desc[i].bufferInfos->range;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                writes[i].pBufferInfo = &Binfo[i];
+            }
+            default:
+                break;
             }
             writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet = (VkDescriptorSet)sets->ID;
@@ -731,7 +884,46 @@ namespace RHI
             flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         return flags;
     }
-    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateDynamicDescriptor(DescriptorHeap* heap,DynamicDescriptor** descriptor, DescriptorType type,ShaderStage stage, RHI::Buffer* buffer,uint32_t offset,uint32_t size)
+    {
+        GFX_ASSERT(type == DescriptorType::ConstantBufferDynamic || type == DescriptorType::StructuredBufferDynamic);
+        VkDescriptorSetLayoutBinding binding;
+        binding.binding = 0;
+        binding.descriptorCount = 1;
+        binding.descriptorType = DescType(type);
+        binding.pImmutableSamplers = nullptr;
+        binding.stageFlags = VkShaderStage(stage);
+        VkDescriptorSetLayoutCreateInfo info;//todo construct the set layout only once as part of the device
+        info.pNext = 0;
+        info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        info.bindingCount = 1;
+        info.flags = 0;
+        info.pBindings = &binding;
+        VkDescriptorSetLayout layout;
+        vDynamicDescriptor* vdescriptor = new vDynamicDescriptor();
+        vkCreateDescriptorSetLayout((VkDevice)ID, &info, nullptr, &layout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = (VkDescriptorPool)heap->ID;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &layout;
+        vkAllocateDescriptorSets((VkDevice)ID, &allocInfo, (VkDescriptorSet*)&vdescriptor->ID);
+        *descriptor = vdescriptor;
+        //vkDestroyDescriptorSetLayout((VkDevice)ID, layout, nullptr);
+        VkDescriptorBufferInfo binfo{};
+        binfo.buffer = (VkBuffer)buffer->ID;
+        binfo.offset = offset;
+        binfo.range = size;
+        VkWriteDescriptorSet write{};
+        write.descriptorCount = 1;
+        write.descriptorType = DescType(type);
+        write.dstSet = (VkDescriptorSet)vdescriptor->ID;
+        write.pBufferInfo = &binfo;
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        vkUpdateDescriptorSets((VkDevice)ID, 1,&write, 0, nullptr);
+        return RESULT();
+    }
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* automatic_info,std::uint64_t offset, ResourceType type)
     {
         vTexture* vtexture = new vTexture;
         VkImageCreateInfo info{};
@@ -749,6 +941,19 @@ namespace RHI
         info.usage = ImageUsage(desc->usage);
         info.samples = VK_SAMPLE_COUNT_1_BIT;
         vkCreateImage((VkDevice)ID, &info, nullptr, (VkImage*)&vtexture->ID);
+        if (type == ResourceType::Automatic)
+        {
+            VmaAllocationCreateInfo allocCreateInfo{};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = 0;
+            allocCreateInfo.flags |=
+                (automatic_info->access_mode == AutomaticAllocationCPUAccessMode::Random) ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT : 0;
+            allocCreateInfo.flags |=
+                (automatic_info->access_mode == AutomaticAllocationCPUAccessMode::Sequential) ? VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT : 0;
+            RESULT res = vmaCreateImage(((vDevice*)this)->allocator, &info, &allocCreateInfo, (VkImage*)&vtexture->ID, &vtexture->vma_ID, nullptr);
+            *texture = vtexture;
+            return res;
+        }
         if (type == ResourceType::Commited)
         {
             RHI::Heap* iheap;

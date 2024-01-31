@@ -29,7 +29,7 @@ namespace RHI
 	}
 	RESULT SwapChain::Present(std::uint32_t imgIndex)
 	{
-		vkAcquireNextImageKHR((VkDevice)Device_ID, (VkSwapchainKHR)ID, UINT64_MAX, ((vSwapChain*)this)->present_semaphore, VK_NULL_HANDLE, &imgIndex);
+		vkAcquireNextImageKHR((VkDevice)((vDevice*)device)->ID, (VkSwapchainKHR)ID, UINT64_MAX, ((vSwapChain*)this)->present_semaphore, VK_NULL_HANDLE, &imgIndex);
 		VkPresentInfoKHR presentInfo{};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 

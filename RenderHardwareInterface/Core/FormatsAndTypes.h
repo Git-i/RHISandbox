@@ -191,9 +191,14 @@ namespace RHI
 	{
 		RTV, DSV, SRV_CBV_UAV, SAMPLER
 	};
-	enum class DescriptorType
+	enum class DescriptorClass
 	{
 		CBV, RTV, DSV, SRV, UAV, Sampler
+	};
+	enum class DescriptorType
+	{
+		SampledTexture, ConstantBuffer, StructuredBuffer, ConstantBufferDynamic, StructuredBufferDynamic,Sampler,
+		RTV,DSV
 	};
 	enum class ResourceLayout
 	{
@@ -237,7 +242,8 @@ namespace RHI
 		ConstantBuffer = 1 << 1,
 		IndexBuffer = 1 << 2,
 		CopySrc = 1 << 3,
-		CopyDst = 1 << 4
+		CopyDst = 1 << 4,
+		StructuredBuffer = 1 << 5
 	};
 	DEFINE_ENUM_FLAG_OPERATORS(BufferUsage);
 	enum class PipelineStage
@@ -311,6 +317,14 @@ namespace RHI
 		LineStrip,
 		TriangleList,
 		TriangleStrip
+	};
+	enum class AutomaticAllocationCPUAccessMode
+	{
+		None = 0, Random, Sequential
+	};
+	struct AutomaticAllocationInfo
+	{
+		AutomaticAllocationCPUAccessMode access_mode;
 	};
 	//Structs for tag dispatch
 	typedef union { void* ptr; std::uintptr_t val; } CPU_HANDLE;

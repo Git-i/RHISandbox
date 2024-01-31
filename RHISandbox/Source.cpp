@@ -8,6 +8,7 @@
 #include "stb_image.h"
 #include <chrono>
 #pragma comment(lib, "d3d12.lib")
+
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 611; }
 
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\"; }
@@ -336,7 +337,7 @@ int main()
 	StagingBuffer->UnMap();
 	commandList->CopyBufferRegion(0, 0, sizeof(std::uint16_t)* indices.size(), StagingBuffer, IndexBuffer);
 	commandList->CopyBufferRegion(vbOffset, 0, sizeof(Vertex)* vertices.size(), StagingBuffer, VertexBuffer);
-	commandList->CopyBufferToImage(imgOffset, width, height, imagebarr.subresourceRange, { 0,0,0 }, { 512,512,1 }, StagingBuffer, texture);
+	commandList->CopyBufferToImage(imgOffset,  imagebarr.subresourceRange, { 0,0,0 }, { 512,512,1 }, StagingBuffer, texture);
 
 	imagebarr.oldLayout = RHI::ResourceLayout::TRANSFER_DST_OPTIMAL;
 	imagebarr.newLayout = RHI::ResourceLayout::SHADER_READ_ONLY_OPTIMAL;
@@ -354,7 +355,7 @@ int main()
 	PSOdesc.VS = "shaders/basic_triangle_vs";
 	PSOdesc.PS = "shaders/basic_triangle_fs";
 	PSOdesc.topology = RHI::PrimitiveTopology::TriangleList;
-
+	
 	RHI::InputElementDesc ied[2];
 	ied[0].location = 0;
 	ied[0].inputSlot = 0;
@@ -394,7 +395,10 @@ int main()
 	rpDesc[0].descriptorTable.ranges = range;
 	rpDesc[1].descriptorTable.ranges = &range[2];
 	rpDesc[1].descriptorTable.numDescriptorRanges = 3;
-
+	//A root parameter describes the content of each descriptor table, it only has 1, hence it is a dTable;
+	//A descriptor table has descriptor ranges
+	//A descriptor range contains the of the shader register slot and number of descriptors in it
+	
 
 	RHI::RootSignatureDesc rsDesc;
 	rsDesc.numRootParameters = 2;
