@@ -491,6 +491,7 @@ namespace RHI
     {
         vDescriptorSetLayout* vSetLayouts = new vDescriptorSetLayout[desc->numRootParameters];
         vRootSignature* vrootSignature = new vRootSignature;
+        vrootSignature->setIndices.reserve(desc->numRootParameters);
         VkDescriptorSetLayout descriptorSetLayout[5];
         //VkPushConstantRange pushConstantRanges[5];
         VkDescriptorSetLayoutCreateInfo layoutInfo[5]{};
@@ -511,6 +512,7 @@ namespace RHI
                 layoutInfo[i].pBindings = &binding;
                 layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
                 vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
+                vrootSignature->setIndices.push_back(desc->rootParameters[i].dynamicDescriptor.setIndex);
                 continue;
             }
             VkDescriptorSetLayoutBinding LayoutBinding[5] = {};
@@ -523,6 +525,7 @@ namespace RHI
                 LayoutBinding[j].stageFlags = VkShaderStage(desc->rootParameters[i].descriptorTable.ranges[j].stage);
                 numLayouts++;
             }
+            vrootSignature->setIndices.push_back(desc->rootParameters[i].descriptorTable.setIndex);
             layoutInfo[i].bindingCount = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
             layoutInfo[i].pBindings = LayoutBinding;
             layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

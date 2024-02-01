@@ -30,10 +30,12 @@ namespace RHI
 	struct DescriptorTable
 	{
 		std::uint32_t numDescriptorRanges;
+		std::uint32_t setIndex;
 		DescriptorRange* ranges;
 	};
 	struct DynamicDescriptorDesc
 	{
+		uint32_t setIndex;
 		DescriptorType type;
 		ShaderStage stage;
 	};

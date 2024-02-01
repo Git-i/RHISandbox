@@ -189,14 +189,16 @@ namespace RHI
     {
         VkDescriptorSet sets;
         sets = (VkDescriptorSet)set->ID;
-        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, rootParamIndex, 1, &sets,1,&offset);
+        uint32_t setIndex = ((vRootSignature*)rs)->setIndices[rootParamIndex];
+        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, setIndex, 1, &sets,1,&offset);
         return 0;
     }
     RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
     {
         VkDescriptorSet sets;
         sets = (VkDescriptorSet)set->ID;
-        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, rootParamIndex, 1, &sets, 0, 0);
+        uint32_t setIndex = ((vRootSignature*)rs)->setIndices[rootParamIndex];
+        vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, setIndex, 1, &sets, 0, 0);
         return RESULT();
     }
     RESULT GraphicsCommandList::SetDescriptorHeap(DescriptorHeap* heap)

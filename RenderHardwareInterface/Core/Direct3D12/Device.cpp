@@ -465,7 +465,7 @@ namespace RHI
             for (UINT j = 0; j < desc->rootParameters[i].descriptorTable.numDescriptorRanges; j++)
             {
                 range[rangeIndex].BaseShaderRegister = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
-                range[rangeIndex].RegisterSpace = i;
+                range[rangeIndex].RegisterSpace = desc->rootParameters[i].descriptorTable.setIndex;
                 range[rangeIndex].NumDescriptors = desc->rootParameters[i].descriptorTable.ranges[j].numDescriptors;
                 range[rangeIndex].RangeType = RangeType(desc->rootParameters[i].descriptorTable.ranges[j].type);
                 range[rangeIndex].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
