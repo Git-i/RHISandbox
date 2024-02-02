@@ -318,7 +318,7 @@ namespace RHI
         info.format = VK_FORMAT_D32_SFLOAT;
         return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
     }
-    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorClass type)
+    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
     {
         return sizeof(VkImageView);
     }
@@ -804,7 +804,6 @@ namespace RHI
         VkWriteDescriptorSet writes[5]{};
         VkDescriptorBufferInfo Binfo[5]{ };
         VkDescriptorImageInfo Iinfo[5]{ };
-        VkImageView view[5]{};
         for(uint32_t i = 0; i < numDescs; i++)
         {
             switch (desc[i].type)
@@ -820,23 +819,12 @@ namespace RHI
             }
             case(RHI::DescriptorType::SampledTexture):
             {
-                VkImageViewCreateInfo info{};
-                info.viewType = VK_IMAGE_VIEW_TYPE_2D; //todo
-                info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-                info.image = (VkImage)desc[i].textureInfos->texture->ID;
-                info.format = VK_FORMAT_R8G8B8A8_UNORM;
-                info.components = { VK_COMPONENT_SWIZZLE_IDENTITY };
-                info.subresourceRange.levelCount = 1;
-                info.subresourceRange.layerCount = 1;
-                info.subresourceRange.baseMipLevel = 0;
-                info.subresourceRange.baseArrayLayer = 0;
-                vkCreateImageView((VkDevice)ID, &info, nullptr, &view[i]);
-                Iinfo[i].imageView = view[i];
+                Iinfo[i].imageView = (VkImageView)desc[i].textureInfos->texture->ID;
                 Iinfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 Iinfo[i].sampler = nullptr;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                 writes[i].pImageInfo = &Iinfo[i];
+                break;
             }
             case(RHI::DescriptorType::StructuredBuffer):
             {
@@ -845,6 +833,7 @@ namespace RHI
                 Binfo[i].range = desc[i].bufferInfos->range;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 writes[i].pBufferInfo = &Binfo[i];
+                break;
             }
             default:
                 break;
@@ -856,11 +845,7 @@ namespace RHI
             writes[i].descriptorCount = desc->numDescriptors;
         }
         vkUpdateDescriptorSets((VkDevice)ID, numDescs, writes, 0, nullptr);
-        for (int i  = 0; i < 5; i++)
-        {
-            if (view[i]);
-               // vkDestroyImageView((VkDevice)ID, view[i], nullptr);
-        }
+        
         return RESULT();
     }
     VkImageType ImageType(TextureType type)
@@ -1000,6 +985,46 @@ namespace RHI
         requirements->alignment = req.memoryRequirements.alignment;
         requirements->size = req.memoryRequirements.size;
         requirements->memoryTypeBits = req.memoryRequirements.memoryTypeBits;
+        return RESULT();
+    }
+    static VkImageViewType VkViewType(TextureViewType type)
+    {
+        switch (type)
+        {
+        case RHI::TextureViewType::Texture1D: return VK_IMAGE_VIEW_TYPE_1D;
+            break;
+        case RHI::TextureViewType::Texture2D: return VK_IMAGE_VIEW_TYPE_2D;
+            break;
+        case RHI::TextureViewType::Texture3D: return VK_IMAGE_VIEW_TYPE_3D;
+            break;
+        case RHI::TextureViewType::TextureCube: return VK_IMAGE_VIEW_TYPE_CUBE;
+            break;
+        default:
+            break;
+        }
+    }
+    RESULT Device::CreateTextureView(TextureViewDesc* desc, TextureView** view)
+    {
+        VkImageViewCreateInfo info{};
+        info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        info.flags = 0;
+        info.format = FormatConv(desc->format);
+        info.image = (VkImage)desc->texture->ID;
+        info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        VkImageSubresourceRange range;
+        range.aspectMask = (VkImageAspectFlags)desc->range.imageAspect;
+        range.baseMipLevel =                   desc->range.IndexOrFirstMipLevel;
+        range.baseArrayLayer =                 desc->range.FirstArraySlice;
+        range.layerCount =                     desc->range.NumArraySlices;
+        range.levelCount =                     desc->range.NumMipLevels;
+        info.subresourceRange = range;
+        info.viewType = VkViewType(desc->type);
+        vTextureView* vtview = new vTextureView;
+        vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)&vtview->ID);
+        *view = vtview;
         return RESULT();
     }
 }

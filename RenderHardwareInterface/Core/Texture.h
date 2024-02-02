@@ -12,13 +12,6 @@ namespace RHI
 		void UnMap();
 	};
 
-
-	//Not in use, maybe revisit the concept in the future
-	class RHI_API TextureView : public Object
-	{
-	public:
-		
-	};
 	enum class TextureType
 	{
 		Texture1D, Texture2D, Texture3D

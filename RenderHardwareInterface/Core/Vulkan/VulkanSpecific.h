@@ -14,6 +14,7 @@
 #include "../Fence.h"
 #include "../Instance.h"
 #include "../ShaderReflect.h"
+#include "../TextureView.h"
 #include "vk_mem_alloc.h"
 #include "spirv_reflect.h"
 namespace RHI
@@ -92,6 +93,10 @@ namespace RHI
             ((vDevice*)device)->Release();
         }
         std::vector<Internal_ID> m_pools;
+    };
+    class vTextureView : public TextureView
+    {
+
     };
     class vCommandQueue : public CommandQueue
     {

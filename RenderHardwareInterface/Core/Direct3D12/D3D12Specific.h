@@ -10,6 +10,7 @@
 #include "../CommandQueue.h"
 #include "../PipelineStateObject.h"
 #include "../RootSignature.h"
+#include "../ShaderReflect.h"
 #include "../Fence.h"
 #include <vector>
 namespace RHI
@@ -60,6 +61,15 @@ namespace RHI
     {
         friend class Device;
         UINT64 offset = { 0 };
+    };
+    class D3D12DynamicDescriptor : public DynamicDescriptor
+    {
+    public:
+        D3D12_GPU_VIRTUAL_ADDRESS address;
+    };
+    class D3D12ShaderReflection : public ShaderReflection
+    {
+
     };
     class D3D12CommandAllocator : public CommandAllocator
     {

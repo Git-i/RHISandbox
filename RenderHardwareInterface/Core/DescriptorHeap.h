@@ -2,7 +2,7 @@
 #include "Buffer.h"
 #include "FormatsAndTypes.h"
 #include "Object.h"
-#include "Texture.h"
+#include "TextureView.h"
 namespace RHI
 {
 	class RHI_API DescriptorHeap : public Object
@@ -41,7 +41,7 @@ namespace RHI
 	struct DescriptorTextureInfo
 	{
 		ShaderResourceViewDimension dimension;
-		Texture* texture;
+		TextureView* texture;
 	};
 	struct RHI_API DescriptorSetUpdateDesc
 	{

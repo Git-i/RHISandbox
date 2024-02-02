@@ -5,21 +5,25 @@
 #include "include\d3d12.h"
 #include "D3D12Specific.h"
 #pragma comment(lib, "dxgi.lib")
-namespace RHI
+extern "C"
 {
-	RESULT Instance::Create(Instance** instance)
+	RESULT RHI_API RHICreateInstance(RHI::Instance** instance)
 	{
-		D3D12Instance* d3d12instance = new D3D12Instance;
+		RHI::D3D12Instance* d3d12instance = new RHI::D3D12Instance;
 		ID3D12Debug5* pDebug;
-	
+
 		D3D12GetDebugInterface(IID_PPV_ARGS(&pDebug));
 		pDebug->EnableDebugLayer();
 		pDebug->SetEnableGPUBasedValidation(true);
-		
+
 		CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(((IDXGIFactory**)&d3d12instance->ID)));
 		*instance = d3d12instance;
 		return 0;
 	}
+}
+namespace RHI
+{
+	
 	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice** device)
 	{
 		*device = new PhysicalDevice;

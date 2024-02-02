@@ -90,6 +90,12 @@
     <ClInclude Include="Core\ShaderReflect.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Core\TextureView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\FormatUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -186,6 +192,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vendor\spirv_reflect\spirv_reflect.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Direct3D12\ShaderReflect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\Vulkan\FormatUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

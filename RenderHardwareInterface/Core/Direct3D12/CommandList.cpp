@@ -311,12 +311,12 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->DrawIndexedInstanced(IndexCount, InstanceCount, startIndexLocation, startVertexLocation, startInstanceLocation);
         return RESULT();
     }
-    RESULT RHI::GraphicsCommandList::BindIndexBuffer(Buffer* buffer, uint32_t offset)
+    RESULT RHI::GraphicsCommandList::BindIndexBuffer(const Buffer* buffer, uint32_t offset)
     {
         D3D12_INDEX_BUFFER_VIEW view;
         auto desc = ((ID3D12Resource*)buffer->ID)->GetDesc();
         view.BufferLocation = ((ID3D12Resource*)buffer->ID)->GetGPUVirtualAddress() + offset;
-        view.Format = DXGI_FORMAT_R16_UINT; //todo
+        view.Format = DXGI_FORMAT_R32_UINT; //todo
         view.SizeInBytes = desc.Width;
         ((ID3D12GraphicsCommandList*)ID)->IASetIndexBuffer(&view);
         return RESULT();
@@ -344,7 +344,7 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->CopyBufferRegion((ID3D12Resource*)dstBuffer->ID, dstOffset, (ID3D12Resource*)srcBuffer->ID, srcOffset, size);
         return 0;
     }
-    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, uint32_t srcRowWidth, uint32_t srcHeight, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
+    RESULT GraphicsCommandList::CopyBufferToImage(uint32_t srcOffset, SubResourceRange dstRange, Offset3D imgOffset, Extent3D imgSize, Buffer* buffer, Texture* texture)
     {
         D3D12_TEXTURE_COPY_LOCATION pSrcCopy;
         ID3D12Device* device;
@@ -378,6 +378,7 @@ namespace RHI
     }
     RESULT GraphicsCommandList::BindDynamicDescriptor(RootSignature* rs, const DynamicDescriptor* set, std::uint32_t rootParamIndex, std::uint32_t offset)
     {
+        ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootConstantBufferView(rootParamIndex, ((D3D12DynamicDescriptor*)set)->address + offset);
         return RESULT();
     }
 }

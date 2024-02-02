@@ -8,34 +8,8 @@
 #include <iostream>
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-extern "C"
-{
-    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, RHI::Device** device)
-    {
-        RHI::D3D12Device* d3d12device = new RHI::D3D12Device;
-        RHI::D3D12CommandQueue* d3d12queues = new RHI::D3D12CommandQueue[numCommandQueues];
-        D3D12_FEATURE_DATA_D3D12_OPTIONS12 opt;
-        opt.EnhancedBarriersSupported = true;
-        HRESULT res = D3D12CreateDevice((IUnknown*)PhysicalDevice->ID, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(((ID3D12Device10**)&d3d12device->ID)));
-        ((ID3D12Device10*)d3d12device->ID)->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &opt, sizeof(opt));
-        *device = d3d12device;
-        for (int i = 0; i < numCommandQueues; i++)
-        {
-            D3D12_COMMAND_QUEUE_DESC desc;
-            desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-            desc.NodeMask = 0;
-            desc.Priority = commandQueueInfos[i].Priority < 1.f ? D3D12_COMMAND_QUEUE_PRIORITY_NORMAL : D3D12_COMMAND_QUEUE_PRIORITY_HIGH;
-            desc.Type = D3D12CmdListType(commandQueueInfos[i].CommandListType);
-            ((ID3D12Device*)d3d12device->ID)->CreateCommandQueue(&desc, IID_PPV_ARGS(((ID3D12CommandQueue**)&d3d12queues[i].ID)));
-            commandQueues[i] = &d3d12queues[i];
-        }
-        return res;
-    }
-}
 namespace RHI
 {
-    Default_t Default = {};
-    Zero_t Zero = {};
     static D3D12_COMMAND_LIST_TYPE D3D12CmdListType(CommandListType type)
     {
         switch (type)
@@ -50,31 +24,62 @@ namespace RHI
             return D3D12_COMMAND_LIST_TYPE_DIRECT;
         }
     }
-    static D3D12_DESCRIPTOR_HEAP_TYPE D3D12DescriptorHeapType(DescriptorClass type)
+}
+extern "C"
+{
+    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues,Internal_ID instance, RHI::Device** device)
+    {
+        RHI::D3D12Device* d3d12device = new RHI::D3D12Device;
+        RHI::D3D12CommandQueue* d3d12queues = new RHI::D3D12CommandQueue[numCommandQueues];
+        D3D12_FEATURE_DATA_D3D12_OPTIONS12 opt;
+        opt.EnhancedBarriersSupported = true;
+        HRESULT res = D3D12CreateDevice((IUnknown*)PhysicalDevice->ID, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(((ID3D12Device10**)&d3d12device->ID)));
+        ((ID3D12Device10*)d3d12device->ID)->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &opt, sizeof(opt));
+        *device = d3d12device;
+        for (int i = 0; i < numCommandQueues; i++)
+        {
+            D3D12_COMMAND_QUEUE_DESC desc;
+            desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+            desc.NodeMask = 0;
+            desc.Priority = commandQueueInfos[i].Priority < 1.f ? D3D12_COMMAND_QUEUE_PRIORITY_NORMAL : D3D12_COMMAND_QUEUE_PRIORITY_HIGH;
+            desc.Type = RHI::D3D12CmdListType(commandQueueInfos[i].CommandListType);
+            ((ID3D12Device*)d3d12device->ID)->CreateCommandQueue(&desc, IID_PPV_ARGS(((ID3D12CommandQueue**)&d3d12queues[i].ID)));
+            commandQueues[i] = &d3d12queues[i];
+        }
+        return res;
+    }
+}
+namespace RHI
+{
+    Default_t Default = {};
+    Zero_t Zero = {};
+   
+    static D3D12_DESCRIPTOR_HEAP_TYPE D3D12DescriptorHeapType(DescriptorType type)
     {
         switch (type)
         {
-        case(DescriptorClass::RTV):
+        case(DescriptorType::RTV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        case(DescriptorClass::DSV):
+        case(DescriptorType::DSV):
             return D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        case(DescriptorClass::CBV):
+        case(DescriptorType::ConstantBuffer):
             return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorClass::SRV):
+        case(DescriptorType::SampledTexture):
             return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorClass::UAV):
-            return D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        case(DescriptorClass::Sampler):
+        case(DescriptorType::Sampler):
             return D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
         default:
             return (D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES);
         }
     }
-    RESULT Device::CreateCommandAllocator(CommandListType type,CommandAllocator** pAllocator)
+    RESULT Device::CreateCommandAllocators(CommandListType type,uint32_t numAllocators,CommandAllocator** pAllocator)
     {
-        D3D12CommandAllocator* d3d12allocator = new D3D12CommandAllocator;
-        ((ID3D12Device*)ID)->CreateCommandAllocator(D3D12CmdListType(type), IID_PPV_ARGS(((ID3D12CommandAllocator**)&d3d12allocator->ID)));
-        *pAllocator = d3d12allocator;
+        D3D12CommandAllocator* d3d12allocator = new D3D12CommandAllocator[numAllocators];
+        for (uint32_t i = 0; i < numAllocators; i++)
+        {
+            ((ID3D12Device*)ID)->CreateCommandAllocator(D3D12CmdListType(type), IID_PPV_ARGS(((ID3D12CommandAllocator**)&d3d12allocator[i].ID)));
+            pAllocator[i] = &d3d12allocator[i];
+        }
         return 0;
     }
     template<> RESULT Device::CreateCommandList<GraphicsCommandList>(CommandListType type, CommandAllocator* allocator, GraphicsCommandList** ppCommandList)
@@ -91,12 +96,22 @@ namespace RHI
         D3D12_DESCRIPTOR_HEAP_DESC dsDesc;
         dsDesc.NumDescriptors = 0;
         for (UINT i = 0; i < desc->numPoolSizes; i++)
+        {
             dsDesc.NumDescriptors += desc->poolSizes[i].numDescriptors;
+        }
         dsDesc.NodeMask = 0;
-        dsDesc.Flags = desc->poolSizes->type == DescriptorClass::RTV || desc->poolSizes->type == DescriptorClass::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        dsDesc.Flags = desc->poolSizes->type == DescriptorType::RTV || desc->poolSizes->type == DescriptorType::DSV ? D3D12_DESCRIPTOR_HEAP_FLAG_NONE : D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dsDesc.Type = D3D12DescriptorHeapType(desc->poolSizes->type);
         ((ID3D12Device*)ID)->CreateDescriptorHeap(&dsDesc, IID_PPV_ARGS(((ID3D12DescriptorHeap**)&d3d12heap->ID)));
         *descriptorHeap = d3d12heap;
+        return 0;
+    }
+    RESULT Device::CreateDynamicDescriptor(DescriptorHeap* heap, DynamicDescriptor** descriptor, DescriptorType type, ShaderStage stage, RHI::Buffer* buffer, uint32_t offset, uint32_t size)
+    {
+        D3D12DynamicDescriptor* d3d12desc = new D3D12DynamicDescriptor;
+        d3d12desc->address = ((ID3D12Resource*)buffer->ID)->GetGPUVirtualAddress();
+        d3d12desc->address += offset;
+        *descriptor = d3d12desc;
         return 0;
     }
     RESULT Device::CreateDescriptorSets(DescriptorHeap* heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet** pSets)
@@ -122,14 +137,20 @@ namespace RHI
         {
             D3D12_CPU_DESCRIPTOR_HANDLE handle;
             handle.ptr = ((D3D12DescriptorSet*)sets)[0].start.val + (desc[i].binding * ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
-            if (desc[i].type == DescriptorClass::CBV)
+            if (desc[i].type == DescriptorType::ConstantBuffer)
             {
                 D3D12_CONSTANT_BUFFER_VIEW_DESC cbdesc;
                 cbdesc.BufferLocation = ((ID3D12Resource*)desc[i].bufferInfos->buffer->ID)->GetGPUVirtualAddress() + (desc[i].bufferInfos->offset);
                 cbdesc.SizeInBytes = desc[i].bufferInfos->range;
                 ((ID3D12Device*)ID)->CreateConstantBufferView(&cbdesc, handle);
             }
-            else if (desc[i].type == DescriptorClass::SRV)
+            else if (desc[i].type == DescriptorType::StructuredBuffer)
+            {
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+                //todo
+            }
+            else if (desc[i].type == DescriptorType::SampledTexture)
             {
                 D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
                 srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -154,7 +175,7 @@ namespace RHI
         ((ID3D12Device*)ID)->CreateDepthStencilView((ID3D12Resource*)texture->ID, nullptr, {heapHandle.val});//todo
         return RESULT();
     }
-    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorClass type)
+    std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
     {
         return ((ID3D12Device*)ID)->GetDescriptorHandleIncrementSize(D3D12DescriptorHeapType(type));
     }
@@ -177,7 +198,50 @@ namespace RHI
         wcscat(buffer, L".cso");
         D3DReadFileToBlob(buffer, blob);
     }
-    
+    D3D12_FILL_MODE D3DFillMode(RHI::FillMode mode)
+    {
+        switch (mode)
+        {
+        case RHI::FillMode::Solid: return D3D12_FILL_MODE_SOLID;
+            break;
+        case RHI::FillMode::Wireframe:return D3D12_FILL_MODE_WIREFRAME;
+            break;
+        default:
+            break;
+        }
+    }
+    D3D12_CULL_MODE D3DCullMode(CullMode mode)
+    {
+        switch (mode)
+        {
+        case RHI::CullMode::None: return D3D12_CULL_MODE_NONE;
+            break;
+        case RHI::CullMode::Front: return D3D12_CULL_MODE_FRONT;
+            break;
+        case RHI::CullMode::Back: return D3D12_CULL_MODE_BACK;
+            break;
+        default:
+            break;
+        }
+    }
+    UINT D3DSampleCount(SampleMode mode)
+    {
+        switch (mode)
+        {
+        case RHI::SampleMode::x2: return 2;
+            break;
+        case RHI::SampleMode::x4: return 4;
+            break;
+        case RHI::SampleMode::x8: return 8;
+            break;
+        default:
+            break;
+        }
+    }
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE D3DConservativeRaster(bool raster)
+    {
+        return raster ? D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+    }
     RESULT Device::CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject** pPSO)
     {
         D3D12PipelineStateObject* d3d12pso = new D3D12PipelineStateObject;
@@ -226,10 +290,21 @@ namespace RHI
         }
         PSOdesc.InputLayout = {ied, desc->numInputElements};
         PSOdesc.pRootSignature = (ID3D12RootSignature*)desc->rootSig->ID;
-        PSOdesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        PSOdesc.RasterizerState = CD3DX12_RASTERIZER_DESC(
+            D3DFillMode(desc->rasterizerMode.fillMode), 
+            D3DCullMode(desc->rasterizerMode.cullMode), 
+            false, 
+            desc->rasterizerMode.depthBias, 
+            desc->rasterizerMode.depthBiasClamp,
+            desc->rasterizerMode.slopeScaledDepthBias,
+            desc->rasterizerMode.depthClipEnable,
+            desc->rasterizerMode.multisampleEnable,
+            desc->rasterizerMode.AntialiasedLineEnable,
+            0,//D3DSampleCount(desc->sampleCount),
+            D3DConservativeRaster(desc->rasterizerMode.conservativeRaster));
         PSOdesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         PSOdesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        PSOdesc.DepthStencilState.DepthEnable = desc->DepthEnabled;
+        PSOdesc.DepthStencilState.DepthEnable = desc->depthStencilMode.DepthEnable;
         PSOdesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL; //todo
         PSOdesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
         PSOdesc.SampleMask = UINT_MAX;
@@ -300,7 +375,7 @@ namespace RHI
         hp.CreationNodeMask = hp.VisibleNodeMask = 0;
         return hp;
     }
-    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, std::uint64_t offset, ResourceType type)
+    RESULT Device::CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* autoInfo,std::uint64_t offset, ResourceType type)
     {
         D3D12Texture* d3d12texture = new D3D12Texture;
         D3D12_RESOURCE_DESC td{};
@@ -325,6 +400,16 @@ namespace RHI
             cval.Color[3] = desc->optimizedClearValue->clearColor.a;
             cval_ptr = &cval;
         }
+        if (type == ResourceType::Automatic)
+        {
+            D3D12_HEAP_PROPERTIES props;
+            props.CPUPageProperty = autoInfo->access_mode == AutomaticAllocationCPUAccessMode::None ? D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE : D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            props.CreationNodeMask = 0;
+            props.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+            props.Type = D3D12_HEAP_TYPE_CUSTOM;
+            props.VisibleNodeMask = 0;
+            ((ID3D12Device*)ID)->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COMMON, cval_ptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12texture->ID));
+        }
         if (type == ResourceType::Commited)
         {
             D3D12_HEAP_PROPERTIES hProp = D3D12HeapProps(props);
@@ -335,7 +420,7 @@ namespace RHI
         *texture = d3d12texture;
         return RESULT();
     }
-    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props,std::uint64_t offset,ResourceType type)
+    RESULT Device::CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props,AutomaticAllocationInfo* autoInfo,std::uint64_t offset,ResourceType type)
     {
         D3D12Buffer* d3d12buffer = new D3D12Buffer;
         D3D12_RESOURCE_DESC bd{};
@@ -349,6 +434,17 @@ namespace RHI
         bd.SampleDesc.Quality = 0;
         bd.Width = desc->size;
         bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        //todo D3D12 MA
+        if (type == ResourceType::Automatic)
+        {
+            D3D12_HEAP_PROPERTIES props;
+            props.CPUPageProperty = autoInfo->access_mode == AutomaticAllocationCPUAccessMode::None ? D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE : D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+            props.CreationNodeMask = 0;
+            props.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+            props.Type = D3D12_HEAP_TYPE_CUSTOM;
+            props.VisibleNodeMask = 0;
+            ((ID3D12Device*)ID)->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS((ID3D12Resource**)&d3d12buffer->ID));
+        }
         if (type == ResourceType::Commited)
         {
             D3D12_HEAP_PROPERTIES hProp = D3D12HeapProps(props);
@@ -431,17 +527,21 @@ namespace RHI
         *heap = d3d12Heap;
         return 0;
     }
-    D3D12_DESCRIPTOR_RANGE_TYPE RangeType(DescriptorClass type)
+    D3D12_DESCRIPTOR_RANGE_TYPE RangeType(DescriptorType type)
     {
         switch (type)
         {
-        case RHI::DescriptorClass::CBV: return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+        case RHI::DescriptorType::SampledTexture: return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             break;
-        case RHI::DescriptorClass::SRV: return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        case RHI::DescriptorType::ConstantBuffer: return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
             break;
-        case RHI::DescriptorClass::UAV:return D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        case RHI::DescriptorType::StructuredBuffer:return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             break;
-        case RHI::DescriptorClass::Sampler: return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        case RHI::DescriptorType::ConstantBufferDynamic: return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+            break;
+        case RHI::DescriptorType::StructuredBufferDynamic:return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            break;
+        case RHI::DescriptorType::Sampler: return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
             break;
         default:
             break;
@@ -457,6 +557,16 @@ namespace RHI
         D3D12DescriptorSetLayout* dSetLayout = new D3D12DescriptorSetLayout[desc->numRootParameters];
         for (UINT i = 0; i < desc->numRootParameters; i++)
         {
+            if (desc->rootParameters[i].type == RootParameterType::DynamicDescriptor)
+            {
+                GFX_ASSERT(desc->rootParameters[i].dynamicDescriptor.type == DescriptorType::ConstantBufferDynamic ||
+                    desc->rootParameters[i].dynamicDescriptor.type == DescriptorType::StructuredBufferDynamic)
+                params[i].ParameterType = desc->rootParameters[i].dynamicDescriptor.type == DescriptorType::ConstantBufferDynamic ? D3D12_ROOT_PARAMETER_TYPE_CBV : D3D12_ROOT_PARAMETER_TYPE_SRV;
+                params[i].Descriptor.RegisterSpace = desc->rootParameters[i].dynamicDescriptor.setIndex;
+                params[i].Descriptor.ShaderRegister = 0;
+                params[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                continue;
+            }
             params[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             params[i].DescriptorTable.NumDescriptorRanges = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
             dSetLayout[i].numBindings = desc->rootParameters[i].descriptorTable.numDescriptorRanges;

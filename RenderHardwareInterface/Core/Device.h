@@ -12,6 +12,7 @@
 #include "Buffer.h"
 #include "Heap.h"
 #include "RootSignature.h"
+#include "TextureView.h"
 namespace RHI
 {
 	class RHI_API Device : public Object
@@ -24,6 +25,7 @@ namespace RHI
 		template<> RESULT CreateCommandList<GraphicsCommandList>(CommandListType type, CommandAllocator* allocator, GraphicsCommandList** ppCommandList);
 		RESULT CreateDescriptorHeap(DescriptorHeapDesc* desc, DescriptorHeap** descriptorHeap);
 		RESULT CreateDynamicDescriptor(DescriptorHeap* heap, DynamicDescriptor** descriptor, DescriptorType type, ShaderStage stage, RHI::Buffer* buffer,uint32_t offset, uint32_t size);
+		RESULT CreateTextureView(TextureViewDesc* desc, TextureView** view);
 		RESULT CreateDescriptorSets(DescriptorHeap* heap, std::uint32_t numDescriptorSets, DescriptorSetLayout* layouts, DescriptorSet** pSets);
 		RESULT UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* set);
 		RESULT CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* automatic_info,std::uint64_t offset, ResourceType type);
@@ -36,7 +38,7 @@ namespace RHI
 		RESULT CreateRootSignature(RootSignatureDesc* desc, RootSignature** rootSignature, DescriptorSetLayout** pSetLayouts);
 		RESULT CreateHeap(HeapDesc* desc, Heap** heap, bool* usedFallback);
 		RESULT CreateFence(Fence** fence, std::uint64_t val);
-		std::uint32_t GetDescriptorHeapIncrementSize(DescriptorClass type);
+		std::uint32_t GetDescriptorHeapIncrementSize(DescriptorType type);
 		RESULT GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture);
 		~Device();
 	};
