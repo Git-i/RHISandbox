@@ -167,12 +167,41 @@ namespace RHI
     }
     RESULT Device::CreateRenderTargetView(Texture* texture, RenderTargetViewDesc* desc, CPU_HANDLE heapHandle)
     {
-        ((ID3D12Device*)ID)->CreateRenderTargetView((ID3D12Resource*)texture->ID, nullptr, {heapHandle.val}); //todo
+        D3D12_RENDER_TARGET_VIEW_DESC rtvDesc;
+        rtvDesc.Format = (DXGI_FORMAT)desc->format;
+        rtvDesc.ViewDimension = desc->TextureArray? D3D12_RTV_DIMENSION_TEXTURE1DARRAY: D3D12_RTV_DIMENSION_TEXTURE2D;
+        if (desc->TextureArray)
+        {
+            rtvDesc.Texture2DArray.ArraySize = 1;
+            rtvDesc.Texture2DArray.FirstArraySlice = desc->arraySlice;
+            rtvDesc.Texture2DArray.MipSlice = desc->textureMipSlice;
+            rtvDesc.Texture2DArray.PlaneSlice = 0;
+        }
+        else
+        {
+            rtvDesc.Texture2D.MipSlice = desc->textureMipSlice;
+            rtvDesc.Texture2D.PlaneSlice = 0;//??todo
+        }
+        ((ID3D12Device*)ID)->CreateRenderTargetView((ID3D12Resource*)texture->ID, &rtvDesc, {heapHandle.val}); //todo
         return 0;
     }
     RESULT Device::CreateDepthStencilView(Texture* texture, DepthStencilViewDesc* desc, CPU_HANDLE heapHandle)
     {
-        ((ID3D12Device*)ID)->CreateDepthStencilView((ID3D12Resource*)texture->ID, nullptr, {heapHandle.val});//todo
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+        dsvDesc.Format = (DXGI_FORMAT)desc->format;
+        if (desc->TextureArray)
+        {
+            dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+            dsvDesc.Texture2DArray.ArraySize = 1;
+            dsvDesc.Texture2DArray.FirstArraySlice = desc->arraySlice;
+            dsvDesc.Texture2DArray.MipSlice = desc->textureMipSlice;
+        }
+        else
+        {
+            dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsvDesc.Texture2D.MipSlice = desc->textureMipSlice;
+        }
+        ((ID3D12Device*)ID)->CreateDepthStencilView((ID3D12Resource*)texture->ID, &dsvDesc, {heapHandle.val});//todo
         return RESULT();
     }
     std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)

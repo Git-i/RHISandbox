@@ -40,7 +40,6 @@ namespace RHI
 	};
 	struct DescriptorTextureInfo
 	{
-		ShaderResourceViewDimension dimension;
 		TextureView* texture;
 	};
 	struct RHI_API DescriptorSetUpdateDesc

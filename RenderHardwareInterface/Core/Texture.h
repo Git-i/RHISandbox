@@ -44,10 +44,16 @@ namespace RHI
 	};
 	struct RHI_API RenderTargetViewDesc
 	{
-
+		bool TextureArray;
+		uint32_t arraySlice;
+		RHI::Format format;
+		uint32_t textureMipSlice;
 	};
 	struct RHI_API DepthStencilViewDesc
 	{
-
+		bool TextureArray;
+		uint32_t arraySlice;
+		RHI::Format format;
+		uint32_t textureMipSlice;
 	};
 }
