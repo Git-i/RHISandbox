@@ -293,7 +293,7 @@ namespace RHI
         info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         info.subresourceRange.baseMipLevel = desc->textureMipSlice;
         info.subresourceRange.levelCount = 1;
-        info.subresourceRange.baseArrayLayer = desc->TextureArray ? desc->TextureArray : 0;
+        info.subresourceRange.baseArrayLayer = desc->TextureArray ? desc->arraySlice: 0;
         info.subresourceRange.layerCount = 1;
         info.format = FormatConv(desc->format);
        return vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)heapHandle.ptr);
@@ -919,7 +919,9 @@ namespace RHI
         info.extent.width = desc->width;
         info.extent.height = desc->height;
         info.extent.depth = desc->type == TextureType::Texture3D ? desc->depthOrArraySize : 1;
-        info.flags = 0;
+        VkImageCreateFlags flags = 0;
+        if ((desc->usage & TextureUsage::CubeMap) != TextureUsage::None) flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        info.flags = flags;
         info.format = FormatConv(desc->format);
         info.imageType = ImageType(desc->type);
         info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;

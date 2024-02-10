@@ -26,7 +26,8 @@ namespace RHI
 		CopyDst = 1 << 0,
 		SampledImage = 1 << 1,
 		ColorAttachment = 1 << 2,
-		DepthStencilAttachment = 1 << 3
+		DepthStencilAttachment = 1 << 3,
+		CubeMap = 1 << 4
 	};
 	DEFINE_ENUM_FLAG_OPERATORS(TextureUsage);
 	struct RHI_API TextureDesc
