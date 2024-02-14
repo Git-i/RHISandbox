@@ -200,6 +200,10 @@ namespace RHI
 		SampledTexture, ConstantBuffer, StructuredBuffer, ConstantBufferDynamic, StructuredBufferDynamic,Sampler,
 		RTV,DSV
 	};
+	enum class ComparisonFunc : uint8_t
+	{
+		Never = 0, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always
+	};
 	enum class ResourceLayout
 	{
 		UNDEFINED = 0,

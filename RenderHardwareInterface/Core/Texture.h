@@ -57,4 +57,28 @@ namespace RHI
 		RHI::Format format;
 		uint32_t textureMipSlice;
 	};
+	enum class AddressMode
+	{
+		Border, Clamp, Mirror,Wrap
+	};
+	enum class Filter
+	{
+		Linear, Nearest
+	};
+	struct RHI_API SamplerDesc
+	{
+		AddressMode AddressU;
+		AddressMode AddressV;
+		AddressMode AddressW;
+		bool anisotropyEnable;
+		bool compareEnable;
+		ComparisonFunc compareFunc;
+		Filter minFilter;
+		Filter magFilter;
+		Filter mipFilter;
+		uint32_t maxAnisotropy;
+		float minLOD;
+		float maxLOD;
+		float mipLODBias;
+	};
 }

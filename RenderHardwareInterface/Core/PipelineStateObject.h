@@ -106,10 +106,7 @@ namespace RHI
 	{
 		None = 0, All
 	};
-	enum class ComparisonFunc : uint8_t
-	{
-		Never=0, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always
-	};
+	
 	struct DepthStencilOp
 	{
 		StencilOp failOp;

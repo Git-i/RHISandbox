@@ -42,8 +42,8 @@ namespace RHI
     }
     RESULT GraphicsCommandList::PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* bufferBarrier,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers)
     {
-        VkBufferMemoryBarrier BufferBarr[5]{};
-        VkImageMemoryBarrier ImageBarr[5]{};
+        VkBufferMemoryBarrier BufferBarr[10]{};
+        VkImageMemoryBarrier ImageBarr[100]{};
         for (uint32_t i = 0; i < numBufferBarriers; i++)
         {
         }
@@ -185,19 +185,17 @@ namespace RHI
         return RESULT();
         
     }
-    RESULT GraphicsCommandList::BindDynamicDescriptor(RootSignature* rs, const DynamicDescriptor* set, std::uint32_t rootParamIndex, std::uint32_t offset)
+    RESULT GraphicsCommandList::BindDynamicDescriptor(RootSignature* rs, const DynamicDescriptor* set, std::uint32_t setIndex, std::uint32_t offset)
     {
         VkDescriptorSet sets;
         sets = (VkDescriptorSet)set->ID;
-        uint32_t setIndex = ((vRootSignature*)rs)->setIndices[rootParamIndex];
         vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, setIndex, 1, &sets,1,&offset);
         return 0;
     }
-    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
+    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t setIndex)
     {
         VkDescriptorSet sets;
         sets = (VkDescriptorSet)set->ID;
-        uint32_t setIndex = ((vRootSignature*)rs)->setIndices[rootParamIndex];
         vkCmdBindDescriptorSets((VkCommandBuffer)ID, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)rs->ID, setIndex, 1, &sets, 0, 0);
         return RESULT();
     }
@@ -237,6 +235,24 @@ namespace RHI
         copy.imageSubresource.layerCount = dstRange.NumArraySlices;
         copy.imageSubresource.mipLevel = dstRange.IndexOrFirstMipLevel;
         vkCmdCopyBufferToImage((VkCommandBuffer)ID, (VkBuffer)buffer->ID, (VkImage)texture->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        return RESULT();
+    }
+
+    RESULT GraphicsCommandList::CopyTextureRegion(SubResourceRange srcRange, SubResourceRange dstRange, Offset3D srcOffset, Offset3D dstOffset, Extent3D extent, Texture* src, Texture* dst)
+    {
+        VkImageCopy copy{};
+        copy.dstOffset = { dstOffset.width, dstOffset.height,dstOffset.depth };
+        copy.srcOffset = { srcOffset.width, srcOffset.height, dstOffset.depth };
+        copy.extent = { extent.width,extent.height,extent.depth };
+        copy.srcSubresource.aspectMask = (VkImageAspectFlags)srcRange.imageAspect;
+        copy.srcSubresource.baseArrayLayer = srcRange.FirstArraySlice;
+        copy.srcSubresource.layerCount = srcRange.NumArraySlices;
+        copy.srcSubresource.mipLevel = srcRange.IndexOrFirstMipLevel;
+        copy.dstSubresource.aspectMask = (VkImageAspectFlags)dstRange.imageAspect;
+        copy.dstSubresource.baseArrayLayer = dstRange.FirstArraySlice;
+        copy.dstSubresource.layerCount = dstRange.NumArraySlices;
+        copy.dstSubresource.mipLevel = dstRange.IndexOrFirstMipLevel;
+        vkCmdCopyImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
         return RESULT();
     }
 }

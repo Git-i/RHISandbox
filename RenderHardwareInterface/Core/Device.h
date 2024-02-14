@@ -31,6 +31,7 @@ namespace RHI
 		RESULT CreateTexture(TextureDesc* desc, Texture** texture, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* automatic_info,std::uint64_t offset, ResourceType type);
 		RESULT CreateRenderTargetView(Texture* texture, RenderTargetViewDesc* desc, CPU_HANDLE heapHandle);
 		RESULT CreateDepthStencilView(Texture* texture, DepthStencilViewDesc* desc, CPU_HANDLE heapHandle);
+		RESULT CreateSampler(SamplerDesc* desc, CPU_HANDLE heapHandle);
 		RESULT CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject** pPSO);
 		RESULT CreateBuffer(BufferDesc* desc, Buffer** buffer, Heap* heap, HeapProperties* props, AutomaticAllocationInfo* automatic_info, std::uint64_t offset, ResourceType type);
 		RESULT GetBufferMemoryRequirements(BufferDesc* desc, MemoryReqirements* requirements);

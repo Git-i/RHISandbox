@@ -40,6 +40,7 @@ namespace RHI
     };
     class D3D12RootSignature : public RootSignature
     {
+        std::vector<uint32_t> rootParamIndices;
     };
     class D3D12DescriptorSetLayout : public DescriptorSetLayout
     {

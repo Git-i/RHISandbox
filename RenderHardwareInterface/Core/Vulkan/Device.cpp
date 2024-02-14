@@ -259,6 +259,10 @@ namespace RHI
         {
             vdescriptorHeap->ID = new VkImageView[desc->poolSizes->numDescriptors];
         }
+        else if (desc->poolSizes->type == DescriptorType::Sampler)
+        {
+            vdescriptorHeap->ID = new VkSampler[desc->poolSizes->numDescriptors];
+        }
         else
         {
             VkDescriptorPoolSize poolSize[5]{};
@@ -320,7 +324,10 @@ namespace RHI
     }
     std::uint32_t Device::GetDescriptorHeapIncrementSize(DescriptorType type)
     {
-        return sizeof(VkImageView);
+        if(type == RHI::DescriptorType::RTV || type == RHI::DescriptorType::DSV)
+            return sizeof(VkImageView);
+        if (type == RHI::DescriptorType::Sampler)
+            return sizeof(VkSampler);
     }
     RESULT Device::GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture)
     {
@@ -491,10 +498,11 @@ namespace RHI
     {
         vDescriptorSetLayout* vSetLayouts = new vDescriptorSetLayout[desc->numRootParameters];
         vRootSignature* vrootSignature = new vRootSignature;
-        vrootSignature->setIndices.reserve(desc->numRootParameters);
         VkDescriptorSetLayout descriptorSetLayout[5];
         //VkPushConstantRange pushConstantRanges[5];
         VkDescriptorSetLayoutCreateInfo layoutInfo[5]{};
+        
+        uint32_t minSetIndex = UINT32_MAX;
         uint32_t numLayouts = 0;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
         {
@@ -512,7 +520,6 @@ namespace RHI
                 layoutInfo[i].pBindings = &binding;
                 layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
                 vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
-                vrootSignature->setIndices.push_back(desc->rootParameters[i].dynamicDescriptor.setIndex);
                 continue;
             }
             VkDescriptorSetLayoutBinding LayoutBinding[5] = {};
@@ -525,7 +532,6 @@ namespace RHI
                 LayoutBinding[j].stageFlags = VkShaderStage(desc->rootParameters[i].descriptorTable.ranges[j].stage);
                 numLayouts++;
             }
-            vrootSignature->setIndices.push_back(desc->rootParameters[i].descriptorTable.setIndex);
             layoutInfo[i].bindingCount = desc->rootParameters[i].descriptorTable.numDescriptorRanges;
             layoutInfo[i].pBindings = LayoutBinding;
             layoutInfo[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -533,12 +539,20 @@ namespace RHI
             pSetLayouts[i] = &vSetLayouts[i];
             vSetLayouts[i].device = this;
         }
-
+        VkDescriptorSetLayout layoutInfoSorted[5]{};
+        //sort descriptor sets
+        for (uint32_t i = 0; i < desc->numRootParameters; i++)
+        {
+            if (desc->rootParameters[i].type == RootParameterType::DynamicDescriptor)
+                layoutInfoSorted[desc->rootParameters[i].dynamicDescriptor.setIndex] = descriptorSetLayout[i];
+            else if(desc->rootParameters[i].type == RootParameterType::DescriptorTable)
+                layoutInfoSorted[desc->rootParameters[i].descriptorTable.setIndex] = descriptorSetLayout[i];
+        }
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = desc->numRootParameters;
-        pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
-        vkCreatePipelineLayout((VkDevice)ID, &pipelineLayoutInfo, nullptr, (VkPipelineLayout*)&vrootSignature->ID);
+        pipelineLayoutInfo.pSetLayouts = layoutInfoSorted;
+        VkResult res = vkCreatePipelineLayout((VkDevice)ID, &pipelineLayoutInfo, nullptr, (VkPipelineLayout*)&vrootSignature->ID);
         vrootSignature->device = this;
         *rootSignature = vrootSignature;
         for (uint32_t i = 0; i < desc->numRootParameters; i++)
@@ -745,7 +759,7 @@ namespace RHI
         VkPipelineRenderingCreateInfo pipelineRendereing{};
         pipelineRendereing.colorAttachmentCount = 1;//todo
         pipelineRendereing.depthAttachmentFormat = FormatConv(desc->DSVFormat);
-        VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+        VkFormat format = FormatConv(desc->RTVFormats[0]);
         pipelineRendereing.pColorAttachmentFormats = &format;
         pipelineRendereing.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 
@@ -790,13 +804,13 @@ namespace RHI
         allocInfo.descriptorSetCount = numDescriptorSets;
         allocInfo.pSetLayouts = vklayouts;
         VkDescriptorSet descriptorSets[5];
-        vkAllocateDescriptorSets((VkDevice)ID, &allocInfo, descriptorSets);
+        VkResult res = vkAllocateDescriptorSets((VkDevice)ID, &allocInfo, descriptorSets);
         for (uint32_t i = 0; i < numDescriptorSets; i++)
         {
             vSets[i].ID = descriptorSets[i];
             pSets[i] = &vSets[i];
         }
-        return RESULT();
+        return res;
     }
     RESULT Device::UpdateDescriptorSets(std::uint32_t numDescs, DescriptorSetUpdateDesc* desc, DescriptorSet* sets)
     {
@@ -834,6 +848,13 @@ namespace RHI
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 writes[i].pBufferInfo = &Binfo[i];
                 break;
+            }
+            case(RHI::DescriptorType::Sampler):
+            {
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+                Iinfo[i].sampler = *(VkSampler*)desc[i].samplerInfos->heapHandle.ptr;
+                Iinfo[i].imageView = VK_NULL_HANDLE;
+                writes[i].pImageInfo = &Iinfo[i];
             }
             default:
                 break;
@@ -931,6 +952,7 @@ namespace RHI
         info.usage = ImageUsage(desc->usage);
         info.samples = VK_SAMPLE_COUNT_1_BIT;
         vkCreateImage((VkDevice)ID, &info, nullptr, (VkImage*)&vtexture->ID);
+        vtexture->device = this;
         if (type == ResourceType::Automatic)
         {
             VmaAllocationCreateInfo allocCreateInfo{};
@@ -1027,6 +1049,54 @@ namespace RHI
         vTextureView* vtview = new vTextureView;
         vkCreateImageView((VkDevice)ID, &info, nullptr, (VkImageView*)&vtview->ID);
         *view = vtview;
+        return RESULT();
+    }
+    VkSamplerAddressMode VkAddressMode(AddressMode mode)
+    {
+        switch (mode)
+        {
+        case RHI::AddressMode::Border: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            break;
+        case RHI::AddressMode::Clamp: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            break;
+        case RHI::AddressMode::Mirror: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+            break;
+        case RHI::AddressMode::Wrap: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            break;
+        default:
+            break;
+        }
+    }
+    VkFilter vkFilter(Filter mode)
+    {
+        return (mode == Filter::Linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    }
+    VkSamplerMipmapMode vkMipMode(Filter mode)
+    {
+        return (mode == Filter::Linear) ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    }
+    RESULT Device::CreateSampler(SamplerDesc* desc, CPU_HANDLE heapHandle)
+    {
+        VkSamplerCreateInfo info;
+        info.addressModeU = VkAddressMode(desc->AddressU);
+        info.addressModeV = VkAddressMode(desc->AddressV);
+        info.addressModeW = VkAddressMode(desc->AddressW);
+        info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        info.anisotropyEnable = desc->anisotropyEnable;
+        info.compareEnable = desc->compareEnable;
+        info.compareOp = vkCompareFunc(desc->compareFunc);
+        info.flags = 0;
+        info.magFilter = vkFilter(desc->magFilter);
+        info.maxAnisotropy = desc->maxAnisotropy;
+        info.maxLod = desc->maxLOD;
+        info.minFilter = vkFilter(desc->minFilter);
+        info.minLod = desc->minLOD;
+        info.mipLodBias = desc->mipLODBias;
+        info.mipmapMode = vkMipMode(desc->mipFilter);
+        info.pNext = 0;
+        info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        info.unnormalizedCoordinates = VK_FALSE;
+        vkCreateSampler((VkDevice)ID, &info, nullptr, (VkSampler*)heapHandle.ptr);
         return RESULT();
     }
 }

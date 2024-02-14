@@ -42,6 +42,10 @@ namespace RHI
 	{
 		TextureView* texture;
 	};
+	struct DescriptorSamplerInfo
+	{
+		CPU_HANDLE heapHandle;
+	};
 	struct RHI_API DescriptorSetUpdateDesc
 	{
 		std::uint32_t binding;
@@ -52,6 +56,7 @@ namespace RHI
 		{
 			DescriptorBufferInfo* bufferInfos;
 			DescriptorTextureInfo* textureInfos;
+			DescriptorSamplerInfo* samplerInfos;
 		};
 	};
 	struct RHI_API PoolSize

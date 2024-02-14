@@ -27,6 +27,7 @@ namespace RHI
 	{
 	public:
 		//CommandAllocator Passed must be the one used to create the command list.
+		RESULT CopyTextureRegion(SubResourceRange srcRange, SubResourceRange dstRange, Offset3D srcOffset, Offset3D dstOffset, Extent3D extent,Texture* src,Texture*dst);
 		RESULT Begin(CommandAllocator* allocator);
 		RESULT PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers);
 		RESULT SetPipelineState(PipelineStateObject* pso);

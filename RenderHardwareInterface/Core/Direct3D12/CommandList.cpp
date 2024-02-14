@@ -326,8 +326,9 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootSignature((ID3D12RootSignature*)rs->ID);
         return RESULT();
     }
-    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t rootParamIndex)
+    RESULT GraphicsCommandList::BindDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t setIndex)
     {
+        //TODO
         D3D12_GPU_DESCRIPTOR_HANDLE handle;
         handle.ptr = ((D3D12DescriptorSet*)set)->gpu_handle;
         ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootDescriptorTable(rootParamIndex, handle);

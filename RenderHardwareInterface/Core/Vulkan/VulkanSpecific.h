@@ -151,9 +151,6 @@ namespace RHI
     class vRootSignature : public RootSignature
     {
     public:
-        //in d3d12 binding is done based on root param index, in vulkan its done based on set index
-        //we store a vector of uint32_t which would correspond to the set index of each root param
-        std::vector<uint32_t> setIndices;
         virtual void Destroy() override
         {
             delete Object::refCnt;
