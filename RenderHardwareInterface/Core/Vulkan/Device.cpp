@@ -227,6 +227,7 @@ namespace RHI
         VkResult res = vkAllocateCommandBuffers((VkDevice)ID, &Info, &commandBuffer);
         vCommandlist->ID = commandBuffer;
         vCommandlist->device = this;
+        vCommandlist->allocator = ((vCommandAllocator*)allocator);
         *pCommandList = vCommandlist;
         Hold();
         ((vCommandAllocator*)allocator)->m_pools.push_back(vCommandlist->ID);
@@ -891,6 +892,8 @@ namespace RHI
             flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         if ((usage & RHI::TextureUsage::DepthStencilAttachment) != RHI::TextureUsage::None)
             flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        if ((usage & RHI::TextureUsage::CopySrc) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         return flags;
     }
     RESULT Device::CreateDynamicDescriptor(DescriptorHeap* heap,DynamicDescriptor** descriptor, DescriptorType type,ShaderStage stage, RHI::Buffer* buffer,uint32_t offset,uint32_t size)

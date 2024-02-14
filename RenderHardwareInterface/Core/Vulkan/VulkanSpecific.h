@@ -17,6 +17,7 @@
 #include "../TextureView.h"
 #include "vk_mem_alloc.h"
 #include "spirv_reflect.h"
+#include <algorithm>//for std::find
 namespace RHI
 {
     //todo find a better of doing this, because this would make the rhi single-device(gpu)
@@ -103,6 +104,17 @@ namespace RHI
     };
     class vGraphicsCommandList : public GraphicsCommandList
     {
+    public:
+        void Destroy() override
+        {
+            if (auto pos = std::find(allocator->m_pools.begin(), allocator->m_pools.end(), ID); pos != allocator->m_pools.end())
+            {
+                allocator->m_pools.erase(pos);
+            }
+            vkFreeCommandBuffers((VkDevice)((vDevice*)device)->ID, (VkCommandPool)allocator->ID, 1, (VkCommandBuffer*)&ID);
+            ((vDevice*)device)->Release();
+        }
+        vCommandAllocator* allocator;
     };
     class vDynamicDescriptor : public DynamicDescriptor
     {
