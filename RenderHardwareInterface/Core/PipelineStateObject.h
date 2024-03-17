@@ -12,6 +12,12 @@ namespace RHI
 		DECL_CLASS_CONSTRUCTORS(PipelineStateObject);
 		
 	};
+	//The Naming Conventions is a bit off, because Compute is kind of an afterthought (so is raytracing)
+	class RHI_API ComputePipeline : public Object
+	{
+	protected:
+		DECL_CLASS_CONSTRUCTORS(ComputePipeline);
+	};
 	enum class InputRate
 	{
 		Vertex, Instance
@@ -152,13 +158,18 @@ namespace RHI
 		bool AntialiasedLineEnable;
 		bool conservativeRaster;
 	};
+	enum ShaderMode
+	{
+		Memory, File
+	};
 	struct RHI_API PipelineStateObjectDesc
 	{
-		const char* VS = NULL;
-		const char* PS = NULL;
-		const char* GS = NULL;
-		const char* HS = NULL;
-		const char* DS = NULL;
+		ShaderCode VS = {};
+		ShaderCode PS = {};
+		ShaderCode GS = {};
+		ShaderCode HS = {};
+		ShaderCode DS = {};
+		ShaderMode shaderMode;
 		BlendMode blendMode;
 		RasterizerMode rasterizerMode;
 		std::uint32_t numInputElements;
@@ -174,5 +185,11 @@ namespace RHI
 		SampleMode sampleCount;
 		Format RTVFormats[8];
 		Format DSVFormat;
+	};
+	struct ComputePipelineDesc
+	{
+		ShaderCode CS;
+		ShaderMode mode;
+		RootSignature* rootSig;
 	};
 }

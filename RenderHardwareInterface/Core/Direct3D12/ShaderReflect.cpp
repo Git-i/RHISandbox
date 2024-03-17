@@ -23,4 +23,8 @@ namespace RHI
 	{
 		
 	}
+	RESULT ShaderReflection::CreateFromMemory(const char* buffer, ShaderReflection** reflection)
+	{
+		return RESULT();
+	}
 }

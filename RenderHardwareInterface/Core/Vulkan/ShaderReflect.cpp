@@ -23,6 +23,15 @@ namespace RHI
 		*pReflection = vReflection;
 		return result;
 	}
+	RESULT ShaderReflection::CreateFromMemory(const char* buffer, uint32_t size,ShaderReflection** pReflection)
+	{
+		vShaderReflection* vReflection = new vShaderReflection;
+		auto module = new SpvReflectShaderModule;
+		vReflection->ID = module;
+		SpvReflectResult result = spvReflectCreateShaderModule(size, buffer, module);
+		*pReflection = vReflection;
+		return result;
+	}
 	uint32_t ShaderReflection::GetNumDescriptorSets()
 	{
 		uint32_t count;
@@ -63,7 +72,7 @@ namespace RHI
 			break;
 		}
 	}
-	static DescriptorType convertTOSRType(SpvReflectDescriptorType type)
+	static DescriptorType convertTOSRType(SpvReflectDescriptorType type, SpvReflectResourceType rtype)
 	{
 		switch (type)
 		{
@@ -73,11 +82,19 @@ namespace RHI
 			break;
 		case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER: return DescriptorType::ConstantBuffer;
 			break;
-		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER: return DescriptorType::StructuredBuffer;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+		{
+			return rtype == SPV_REFLECT_RESOURCE_FLAG_UAV ? DescriptorType::CSBuffer : DescriptorType::StructuredBuffer;
 			break;
+		}
 		case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: return DescriptorType::ConstantBufferDynamic;
 			break;
-		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: return DescriptorType::StructuredBufferDynamic;
+		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+		{
+			return rtype == SPV_REFLECT_RESOURCE_FLAG_UAV ? DescriptorType::CSBufferDynamic : DescriptorType::StructuredBufferDynamic;
+			break;
+		}
+		case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_IMAGE: return DescriptorType::CSTexture;
 			break;
 		default:
 			break;
@@ -90,11 +107,12 @@ namespace RHI
 		for (uint32_t i = 0; i < SPVset->binding_count; i++)
 		{
 			bindings[i].resourceClass = convertTOSRType(SPVset->bindings[i]->resource_type);
-			bindings[i].resourceType = convertTOSRType(SPVset->bindings[i]->descriptor_type);
+			bindings[i].resourceType = convertTOSRType(SPVset->bindings[i]->descriptor_type, SPVset->bindings[i]->resource_type);
 			bindings[i].bindingSlot = SPVset->bindings[i]->binding;
 			bindings[i].count = SPVset->bindings[i]->count;
 			bindings[i].setIndex = SPVset->bindings[i]->set;
 			bindings[i].name = SPVset->bindings[i]->name;
 		}
 	}
+
 }

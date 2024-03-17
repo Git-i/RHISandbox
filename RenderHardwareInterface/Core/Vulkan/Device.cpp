@@ -163,6 +163,20 @@ namespace RHI
         
         return VK_SUCCESS;
     }
+    static VkResult CreateShaderModule(const char* memory, uint32_t size, VkPipelineShaderStageCreateInfo* shader_info, VkShaderStageFlagBits stage, int index, VkShaderModule* module, Internal_ID device)
+    {
+        VkShaderModuleCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        info.codeSize = size;
+        info.pCode = reinterpret_cast<const uint32_t*>(memory);
+        vkCreateShaderModule((VkDevice)device, &info, nullptr, &module[index]);
+        auto& vertShaderStageInfo = shader_info[index];
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = stage;
+        vertShaderStageInfo.module = module[index];
+        vertShaderStageInfo.pName = "main";
+        return VK_SUCCESS;
+    }
     static VkBufferUsageFlags VkBufferUsage(RHI::BufferUsage usage)
     {
         VkBufferUsageFlags flags = 0;
@@ -231,6 +245,7 @@ namespace RHI
         *pCommandList = vCommandlist;
         Hold();
         ((vCommandAllocator*)allocator)->m_pools.push_back(vCommandlist->ID);
+        
         return 0;
     }
     VkDescriptorType DescType(RHI::DescriptorType type)
@@ -248,6 +263,10 @@ namespace RHI
         case RHI::DescriptorType::StructuredBufferDynamic: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
             break;
         case RHI::DescriptorType::Sampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
+            break;
+        case RHI::DescriptorType::CSTexture: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            break;
+        case RHI::DescriptorType::CSBuffer: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             break;
         default:
             break;
@@ -499,9 +518,9 @@ namespace RHI
     {
         vDescriptorSetLayout* vSetLayouts = new vDescriptorSetLayout[desc->numRootParameters];
         vRootSignature* vrootSignature = new vRootSignature;
-        VkDescriptorSetLayout descriptorSetLayout[5];
+        VkDescriptorSetLayout descriptorSetLayout[20];
         //VkPushConstantRange pushConstantRanges[5];
-        VkDescriptorSetLayoutCreateInfo layoutInfo[5]{};
+        VkDescriptorSetLayoutCreateInfo layoutInfo[20]{};
         
         uint32_t minSetIndex = UINT32_MAX;
         uint32_t numLayouts = 0;
@@ -523,7 +542,7 @@ namespace RHI
                 vkCreateDescriptorSetLayout((VkDevice)ID, &layoutInfo[i], nullptr, &descriptorSetLayout[i]);
                 continue;
             }
-            VkDescriptorSetLayoutBinding LayoutBinding[5] = {};
+            VkDescriptorSetLayoutBinding LayoutBinding[20] = {};
             for (uint32_t j = 0; j < desc->rootParameters[i].descriptorTable.numDescriptorRanges; j++)
             {
                 LayoutBinding[j].binding = desc->rootParameters[i].descriptorTable.ranges[j].BaseShaderRegister;
@@ -622,29 +641,46 @@ namespace RHI
         VkPipelineShaderStageCreateInfo ShaderpipelineInfo[5] = {};
         VkShaderModule modules[5];
         int index = 0;
-        if (desc->VS)
+        if (desc->VS.data)
         {
-            CreateShaderModule(desc->VS, ShaderpipelineInfo, VK_SHADER_STAGE_VERTEX_BIT, index, modules, ID);
+            if(desc->shaderMode == File)
+                CreateShaderModule(desc->VS.data, ShaderpipelineInfo, VK_SHADER_STAGE_VERTEX_BIT, index, modules, ID);
+            else
+                CreateShaderModule(desc->VS.data,desc->VS.size, ShaderpipelineInfo, VK_SHADER_STAGE_VERTEX_BIT, index, modules, ID);
+
             index++;
         }
-        if (desc->PS) 
+        if (desc->PS.data) 
         {
-            CreateShaderModule(desc->PS, ShaderpipelineInfo, VK_SHADER_STAGE_FRAGMENT_BIT, index, modules,ID);
+            if (desc->shaderMode == File)
+                CreateShaderModule(desc->PS.data, ShaderpipelineInfo, VK_SHADER_STAGE_FRAGMENT_BIT, index, modules, ID);
+            else
+                CreateShaderModule(desc->PS.data, desc->PS.size, ShaderpipelineInfo, VK_SHADER_STAGE_FRAGMENT_BIT, index, modules, ID);
             index++;
         }
-        if (desc->GS)
+        if (desc->GS.data)
         {
-            CreateShaderModule(desc->GS, ShaderpipelineInfo, VK_SHADER_STAGE_GEOMETRY_BIT, index, modules, ID);
+            if(desc->shaderMode == File)
+                CreateShaderModule(desc->GS.data, ShaderpipelineInfo, VK_SHADER_STAGE_GEOMETRY_BIT, index, modules, ID);
+            else
+                CreateShaderModule(desc->GS.data, desc->GS.size, ShaderpipelineInfo, VK_SHADER_STAGE_GEOMETRY_BIT, index, modules, ID);
             index++;
         }
-        if (desc->HS)
+        if (desc->HS.data)
         {
-            CreateShaderModule(desc->HS, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, index,modules,ID);
+            if (desc->shaderMode == File)
+                CreateShaderModule(desc->HS.data, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, index,modules,ID);
+            else
+                CreateShaderModule(desc->HS.data,desc->HS.size, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, index,modules,ID);
             index++;
         }
-        if (desc->DS)
+        if (desc->DS.data)
         {
-            CreateShaderModule(desc->DS, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, index,modules, ID);
+            if (desc->shaderMode == File)
+                CreateShaderModule(desc->DS.data, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, index,modules, ID);
+            else
+                CreateShaderModule(desc->DS.data,desc->DS.size, ShaderpipelineInfo, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, index,modules, ID);
+                
             index++;
         }
         VkVertexInputAttributeDescription inputAttribDesc[5];
@@ -823,6 +859,15 @@ namespace RHI
         {
             switch (desc[i].type)
             {
+            case(RHI::DescriptorType::CSTexture):
+            {
+                Iinfo[i].imageView = (VkImageView)desc[i].textureInfos->texture->ID;
+                Iinfo[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                Iinfo[i].sampler = nullptr;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                writes[i].pImageInfo = &Iinfo[i];
+                break;
+            }
             case(RHI::DescriptorType::ConstantBuffer):
             {
                 Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer->ID;
@@ -894,6 +939,9 @@ namespace RHI
             flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         if ((usage & RHI::TextureUsage::CopySrc) != RHI::TextureUsage::None)
             flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if ((usage & RHI::TextureUsage::StorageImage) != RHI::TextureUsage::None)
+            flags |= VK_IMAGE_USAGE_STORAGE_BIT;
+
         return flags;
     }
     RESULT Device::CreateDynamicDescriptor(DescriptorHeap* heap,DynamicDescriptor** descriptor, DescriptorType type,ShaderStage stage, RHI::Buffer* buffer,uint32_t offset,uint32_t size)
@@ -1100,6 +1148,22 @@ namespace RHI
         info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         info.unnormalizedCoordinates = VK_FALSE;
         vkCreateSampler((VkDevice)ID, &info, nullptr, (VkSampler*)heapHandle.ptr);
+        return RESULT();
+    }
+    RESULT Device::CreateComputePipeline(ComputePipelineDesc* desc, ComputePipeline** pCP)
+    {
+        vComputePipeline* vpipeline = new vComputePipeline;
+        vpipeline->device = this;
+        VkComputePipelineCreateInfo info{};
+        info.layout = (VkPipelineLayout)desc->rootSig->ID;
+        VkShaderModule module;
+        if (desc->mode == ShaderMode::File) CreateShaderModule(desc->CS.data, &info.stage, VK_SHADER_STAGE_COMPUTE_BIT, 0, &module, ID);
+        else CreateShaderModule(desc->CS.data, desc->CS.size, &info.stage, VK_SHADER_STAGE_COMPUTE_BIT, 0, &module, ID);
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        vkCreateComputePipelines((VkDevice)ID, VK_NULL_HANDLE, 1, &info, nullptr, (VkPipeline*)&vpipeline->ID);
+        *pCP = vpipeline;
+        vkDestroyShaderModule((VkDevice)ID, module, nullptr);
+        Hold();
         return RESULT();
     }
 }

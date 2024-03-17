@@ -40,6 +40,10 @@ namespace RHI
 		*device = vdevice;
 		return res;
 	}
+	API Instance::GetInstanceAPI()
+	{
+		return API::Vulkan;
+	}
 	RESULT Instance::CreateSwapChain(SwapChainDesc* desc, PhysicalDevice* pDevice, Device* Device, CommandQueue* pCommandQueue, SwapChain** pSwapChain)
 	{
 		vSwapChain* vswapChain = new vSwapChain;

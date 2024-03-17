@@ -180,6 +180,16 @@ namespace RHI
             ((vDevice*)device)->Release();
         }
     };
+    class vComputePipeline : public ComputePipeline
+    {
+    public:
+        virtual void Destroy() override
+        {
+            delete Object::refCnt;
+            vkDestroyPipeline((VkDevice)((vDevice*)device)->ID, (VkPipeline)ComputePipeline::ID, nullptr);
+            ((vDevice*)device)->Release();
+        }
+    };
     class vDescriptorSet : public DescriptorSet
     {
     };

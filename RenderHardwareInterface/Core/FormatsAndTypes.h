@@ -132,6 +132,15 @@ namespace RHI
 		unsigned int Numerator;
 		unsigned int Denominator;
 	};
+	struct ShaderCode
+	{
+		char* data = nullptr;
+		uint32_t size = 0;
+	};
+	enum class API
+	{
+		DX12, Vulkan
+	};
 	enum class ResourceType
 	{
 		Placed, Automatic, Commited
@@ -198,7 +207,7 @@ namespace RHI
 	enum class DescriptorType
 	{
 		SampledTexture, ConstantBuffer, StructuredBuffer, ConstantBufferDynamic, StructuredBufferDynamic,Sampler,
-		RTV,DSV
+		RTV,DSV, CSTexture, CSBuffer, CSBufferDynamic
 	};
 	enum class ComparisonFunc : uint8_t
 	{

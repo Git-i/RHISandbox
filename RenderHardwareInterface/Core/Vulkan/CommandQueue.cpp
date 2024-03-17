@@ -27,4 +27,19 @@ namespace RHI
 		submitInfo.pCommandBuffers = (VkCommandBuffer*)lists;
 		return vkQueueSubmit((VkQueue)ID, 1, &submitInfo, VK_NULL_HANDLE);
 	}
+	RESULT CommandQueue::WaitForFence(Fence* fence, std::uint64_t val)
+	{
+		std::uint64_t value = val;
+		VkTimelineSemaphoreSubmitInfo timelineInfo{};
+		timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+		timelineInfo.pNext = NULL;
+		timelineInfo.waitSemaphoreValueCount = 1;
+		timelineInfo.pWaitSemaphoreValues = &value;
+		VkSubmitInfo submitInfo = {};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.pNext = &timelineInfo;
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = (VkSemaphore*)&fence->ID;
+		return vkQueueSubmit((VkQueue)ID, 1, &submitInfo, VK_NULL_HANDLE);
+	}
 }

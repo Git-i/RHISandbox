@@ -10,6 +10,7 @@ namespace RHI
 	protected:
 		DECL_CLASS_CONSTRUCTORS(Instance);
 	public:
+		API GetInstanceAPI();
 		uint32_t GetNumPhysicalDevices();
 		RESULT GetAllPhysicalDevices(PhysicalDevice** devices);
 		RESULT GetPhysicalDevice(int id, PhysicalDevice** device);

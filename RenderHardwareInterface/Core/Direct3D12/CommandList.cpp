@@ -382,4 +382,5 @@ namespace RHI
         ((ID3D12GraphicsCommandList*)ID)->SetGraphicsRootConstantBufferView(rootParamIndex, ((D3D12DynamicDescriptor*)set)->address + offset);
         return RESULT();
     }
+    
 }

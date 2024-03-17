@@ -12,4 +12,8 @@ namespace RHI
 		((ID3D12CommandQueue*)ID)->ExecuteCommandLists(count, (ID3D12CommandList**)lists);
 		return 0;
 	}
+	RESULT CommandQueue::WaitForFence(Fence*, std::uint64_t val)
+	{
+		return RESULT();
+	}
 }
