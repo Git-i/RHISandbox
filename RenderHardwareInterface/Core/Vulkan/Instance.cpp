@@ -5,29 +5,58 @@
 #include "VulkanSpecific.h"
 #include <vector>
 #include <iostream>
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType,
+	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData) {
+
+	std::string_view view(pCallbackData->pMessage);
+	char id_string[1024];
+	strcpy(id_string, "MessageID = 0x");
+	_itoa(pCallbackData->messageIdNumber, id_string + strlen(id_string), 16);
+	size_t ind = view.find(id_string);
+	ind += strlen(id_string);
+	std::cerr << std::endl << "validation layer" << pCallbackData->pMessage + ind << std::endl;
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT && pCallbackData->messageIdNumber != 101294395)
+	{
+		//__debugbreak();
+	}
+
+	return VK_FALSE;
+}
 extern "C"
 {
 	RESULT RHI_API RHICreateInstance(RHI::Instance** instance)
 	{
+		
 		RHI::vInstance* vinstance = new RHI::vInstance;
 		*instance = vinstance;
 		volkInitialize();
 		VkInstanceCreateInfo info = {};
 		const char* layerName = "VK_LAYER_KHRONOS_validation";
-		const char* extensionName[2] = { "VK_KHR_surface", "VK_KHR_win32_surface" };
+		const char* extensionName[3] = { "VK_KHR_surface", "VK_KHR_win32_surface",VK_EXT_DEBUG_UTILS_EXTENSION_NAME, };
 		info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		info.pNext = nullptr;
 		info.enabledLayerCount = 1;
 		info.ppEnabledLayerNames = &layerName;
-		info.enabledExtensionCount = 2;
+		info.enabledExtensionCount = 3;
 		info.ppEnabledExtensionNames = extensionName;
 		VkResult res = vkCreateInstance(&info, nullptr, (VkInstance*)&vinstance->ID);
 		volkLoadInstance((VkInstance)vinstance->ID);
+		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		createInfo.pfnUserCallback = debugCallback;
+		createInfo.pUserData = nullptr; // Optional
+		vkCreateDebugUtilsMessengerEXT((VkInstance)vinstance->ID, &createInfo, nullptr, &vinstance->messanger);
 		return res;
 	}
 }
 namespace RHI
 {
+
 	RESULT Instance::GetPhysicalDevice(int id, PhysicalDevice** device)
 	{
 		vPhysicalDevice* vdevice = new vPhysicalDevice;
@@ -43,6 +72,12 @@ namespace RHI
 	API Instance::GetInstanceAPI()
 	{
 		return API::Vulkan;
+	}
+	uint32_t Instance::GetNumPhysicalDevices()
+	{
+		std::uint32_t count;
+		vkEnumeratePhysicalDevices((VkInstance)ID, &count, nullptr);
+		return count;
 	}
 	RESULT Instance::CreateSwapChain(SwapChainDesc* desc, PhysicalDevice* pDevice, Device* Device, CommandQueue* pCommandQueue, SwapChain** pSwapChain)
 	{

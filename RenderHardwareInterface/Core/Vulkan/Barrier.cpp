@@ -3,9 +3,6 @@
 #include "volk.h"
 namespace RHI
 {
-	RHI::TextureMemoryBarrier::TextureMemoryBarrier()
-	{
-	}
 	RHI::TextureMemoryBarrier::TextureMemoryBarrier(Default_t)
 	{
 	}

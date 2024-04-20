@@ -628,6 +628,7 @@ namespace RHI
         *rootSignature = d3d12rootsig;
         return res;
     }
+    
     Device::~Device()
     {
         ID3D12DebugDevice* device;

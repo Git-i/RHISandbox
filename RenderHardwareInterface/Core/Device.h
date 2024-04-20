@@ -11,6 +11,7 @@
 #include "PipelineStateObject.h"
 #include "Buffer.h"
 #include "Heap.h"
+#include "DebugBuffer.h"
 #include "RootSignature.h"
 #include "TextureView.h"
 namespace RHI
@@ -40,8 +41,11 @@ namespace RHI
 		RESULT CreateRootSignature(RootSignatureDesc* desc, RootSignature** rootSignature, DescriptorSetLayout** pSetLayouts);
 		RESULT CreateHeap(HeapDesc* desc, Heap** heap, bool* usedFallback);
 		RESULT CreateFence(Fence** fence, std::uint64_t val);
+		RESULT CreateDebugBuffer(DebugBuffer** buffer);
 		std::uint32_t GetDescriptorHeapIncrementSize(DescriptorType type);
 		RESULT GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture);
+		//This is not staying
+		RESULT QueueWaitIdle(CommandQueue* queue);
 		~Device();
 	};
 	const RESULT& vkCompareFunc();

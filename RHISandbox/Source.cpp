@@ -147,8 +147,8 @@ int main()
 	RHI::DescriptorHeap* rtvDescriptorHeap;
 	RHI::DescriptorHeap* dsvDescriptorHeap;
 
-	RHI::Texture* texture;
-	RHI::TextureView* textureView;
+	RHI::Buffer* clusterAABB;
+	RHI::Buffer* constBuffer;
 	RHI::Texture* Depthtexture;
 	RHI::ComputePipeline* pipeline;
 	RHI::RootSignature* rSig;
@@ -172,30 +172,30 @@ int main()
 	}
 	device->CreateFence(&fence, 0);
 	device->CreateCommandList(RHI::CommandListType::Direct, fResources[1].commandAllocator, &commandList);
-	RHI::TextureDesc tdesc;
-	tdesc.depthOrArraySize = 1;
-	tdesc.format = RHI::Format::R32G32B32A32_FLOAT;
-	tdesc.height = 256;
-	tdesc.mipLevels = 1;
-	tdesc.mode = RHI::TextureTilingMode::Optimal;
-	tdesc.optimizedClearValue = nullptr;
-	tdesc.sampleCount = 1;
-	tdesc.type = RHI::TextureType::Texture2D;
-	tdesc.usage = RHI::TextureUsage::StorageImage;
-	tdesc.width = 256;
+	RHI::BufferDesc bd;
+	bd.size = (sizeof(float) * 4) * 2 * 16 * 9 * 24;
+	bd.usage = RHI::BufferUsage::StructuredBuffer;
 	RHI::AutomaticAllocationInfo info;
 	info.access_mode = RHI::AutomaticAllocationCPUAccessMode::None;
-	device->CreateTexture(&tdesc, &texture,0,0,&info,0,RHI::ResourceType::Automatic);
-	RHI::DescriptorRange range;
-	range.BaseShaderRegister = 0;
-	range.numDescriptors = 1;
-	range.stage = RHI::ShaderStage::Compute;
-	range.type = RHI::DescriptorType::CSTexture;
+	device->CreateBuffer(&bd, &clusterAABB, 0, 0, &info, 0, RHI::ResourceType::Automatic);
+	bd.size = 256;
+	bd.usage = RHI::BufferUsage::ConstantBuffer;
+	info.access_mode = RHI::AutomaticAllocationCPUAccessMode::Sequential;
+	device->CreateBuffer(&bd, &constBuffer, 0, 0, &info, 0, RHI::ResourceType::Automatic);
+	RHI::DescriptorRange range[2];
+	range[0].BaseShaderRegister = 0;
+	range[0].numDescriptors = 1;
+	range[0].stage = RHI::ShaderStage::Compute;
+	range[0].type = RHI::DescriptorType::ConstantBuffer;
+	range[1].BaseShaderRegister = 1;
+	range[1].numDescriptors = 1;
+	range[1].stage = RHI::ShaderStage::Compute;
+	range[1].type = RHI::DescriptorType::CSBuffer;
 	RHI::RootParameterDesc rpDesc;
 	rpDesc.type = RHI::RootParameterType::DescriptorTable;
 	rpDesc.descriptorTable.setIndex = 0;
-	rpDesc.descriptorTable.numDescriptorRanges = 1;
-	rpDesc.descriptorTable.ranges = &range;
+	rpDesc.descriptorTable.numDescriptorRanges = 2;
+	rpDesc.descriptorTable.ranges = range;
 	RHI::RootSignatureDesc rsDesc;
 	rsDesc.numRootParameters = 1;
 	rsDesc.rootParameters = &rpDesc;
@@ -206,42 +206,51 @@ int main()
 	cpDesc.mode = RHI::ShaderMode::File;
 	cpDesc.rootSig = rSig;
 	device->CreateComputePipeline(&cpDesc, &pipeline);
-	RHI::PoolSize pSize;
-	pSize.numDescriptors = 7;
-	pSize.type = RHI::DescriptorType::CSTexture;
+	RHI::PoolSize pSize[2];
+	pSize[0].numDescriptors = 3;
+	pSize[0].type = RHI::DescriptorType::CSBuffer;
+	pSize[1].numDescriptors = 3;
+	pSize[1].type = RHI::DescriptorType::ConstantBuffer;
 	RHI::DescriptorHeapDesc dhDesc;
 	dhDesc.maxDescriptorSets = 10;
-	dhDesc.numPoolSizes = 1;
-	dhDesc.poolSizes = &pSize;
+	dhDesc.numPoolSizes = 2;
+	dhDesc.poolSizes = pSize;
 	device->CreateDescriptorHeap(&dhDesc, &dHeap);
 	device->CreateDescriptorSets(dHeap, 1, dsLayout, &dSet);
-	RHI::TextureViewDesc tvDesc;
-	tvDesc.format = RHI::Format::R32G32B32A32_FLOAT;
-	tvDesc.range =
-	{
-		.imageAspect = RHI::Aspect::COLOR_BIT,
-		.IndexOrFirstMipLevel = 0,
-		.NumMipLevels = 1,
-		.FirstArraySlice = 0,
-		.NumArraySlices = 1,
-	};
-	tvDesc.type = RHI::TextureViewType::Texture2D;
-	tvDesc.texture = texture;
-	device->CreateTextureView(&tvDesc, &textureView);
-	RHI::DescriptorSetUpdateDesc dsuDesc;
-	dsuDesc.arrayIndex = 0;
-	dsuDesc.binding = 0;
-	dsuDesc.numDescriptors = 1;
-	dsuDesc.type = RHI::DescriptorType::CSTexture;
-	RHI::DescriptorTextureInfo tinfo;
-	tinfo.texture = textureView;
-	dsuDesc.textureInfos = &tinfo;
-	device->UpdateDescriptorSets(1, &dsuDesc, dSet);
+	
+	RHI::DescriptorSetUpdateDesc dsuDesc[2];
+	dsuDesc[0].arrayIndex = 0;
+	dsuDesc[0].binding = 0;
+	dsuDesc[0].numDescriptors = 1;
+	dsuDesc[0].type = RHI::DescriptorType::ConstantBuffer;
+	RHI::DescriptorBufferInfo bInfo;
+	bInfo.buffer = constBuffer;
+	bInfo.offset = 0;
+	bInfo.range = 256;
+	dsuDesc[0].bufferInfos = &bInfo;
+	dsuDesc[1].arrayIndex = 0;
+	dsuDesc[1].binding = 1;
+	dsuDesc[1].numDescriptors = 1;
+	dsuDesc[1].type = RHI::DescriptorType::CSBuffer;
+	RHI::DescriptorBufferInfo bInfo2;
+	bInfo2.buffer = clusterAABB;
+	bInfo2.offset = 0;
+	bInfo2.range = (sizeof(float) * 4) * 2 * 16 * 9 * 24;
+	dsuDesc[1].bufferInfos = &bInfo2;
+	device->UpdateDescriptorSets(2, dsuDesc, dSet);
 	uint64_t fenceVal = 0;
 	uint32_t currentFrame = 0;
 	uint32_t framesInFlight = 3;
 	uint32_t currentRtvIndex = 0;
 	bool running = true;
+	void* data;
+	constBuffer->Map(&data);
+	struct
+	{
+		float resx; float resy; float pad; float pad2; uint32_t dimx; uint32_t dimy; uint32_t dimz; uint32_t _pad;
+	} cpdata;
+	cpdata.resx = 1600; cpdata.resy = 900; cpdata.dimx = 16; cpdata.dimy = 9; cpdata.dimz = 24;
+	memcpy(data, &cpdata, sizeof(cpdata));
 	while (running)
 	{
 		if (PeekMessageW(&msg, 0, 0, 0, PM_REMOVE))
@@ -272,26 +281,19 @@ int main()
 			.NumArraySlices = 1,
 		};
 		barr.texture = backBufferImages[currentRtvIndex];
-		RHI::TextureMemoryBarrier barr2;
-		barr2.AccessFlagsBefore = RHI::ResourceAcessFlags::NONE;
+		RHI::BufferMemoryBarrier barr2;
 		barr2.AccessFlagsAfter = RHI::ResourceAcessFlags::SHADER_WRITE;
-		barr2.oldLayout = RHI::ResourceLayout::UNDEFINED;
-		barr2.newLayout = RHI::ResourceLayout::GENERAL;
-		barr2.previousQueue = RHI::QueueFamily::Ignored;
+		barr2.AccessFlagsBefore = RHI::ResourceAcessFlags::NONE;
+		barr2.buffer = clusterAABB;
 		barr2.nextQueue = RHI::QueueFamily::Ignored;
-		barr2.subresourceRange = {
-			.imageAspect = RHI::Aspect::COLOR_BIT,
-			.IndexOrFirstMipLevel = 0,
-			.NumMipLevels = 1,
-			.FirstArraySlice = 0,
-			.NumArraySlices = 1,
-		};
-		barr2.texture = texture;
+		barr2.offset = 0;
+		barr2.previousQueue = RHI::QueueFamily::Ignored;
+		barr2.size = (sizeof(float) * 4) * 2 * 16 * 9 * 24;
 		commandList->Begin(fResources[currentFrame].commandAllocator);
 		commandList->SetComputePipeline(pipeline);
 		commandList->BindComputeDescriptorSet(rSig, dSet, 0);
-		commandList->PipelineBarrier(RHI::PipelineStage::TOP_OF_PIPE_BIT, RHI::PipelineStage::COMPUTE_SHADER_BIT, 0, 0, 1, &barr2);
-		commandList->Dispatch(256, 256, 1);
+		commandList->PipelineBarrier(RHI::PipelineStage::TOP_OF_PIPE_BIT, RHI::PipelineStage::COMPUTE_SHADER_BIT, 1, &barr2, 0,0);
+		commandList->Dispatch(16, 9, 24);
 		commandList->PipelineBarrier(RHI::PipelineStage::COMPUTE_SHADER_BIT, RHI::PipelineStage::BOTTOM_OF_PIPE_BIT, 0, 0, 1, &barr);
 		commandList->End();
 

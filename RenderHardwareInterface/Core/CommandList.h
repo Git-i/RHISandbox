@@ -5,6 +5,7 @@
 #include "Texture.h"
 #include "Barrier.h"
 #include "DescriptorHeap.h"
+#include "DebugBuffer.h"
 #include "PipelineStateObject.h"
 namespace RHI
 {
@@ -49,6 +50,10 @@ namespace RHI
 		RESULT BindIndexBuffer(const Buffer* buffer, uint32_t offset);
 		RESULT SetRootSignature(RootSignature* rs);
 		RESULT EndRendering();
+		//todo
+		RESULT BlitTexture(Texture* src, Texture* dst, UVector2D srcSize, UVector2D dstSize);
+		RESULT MarkBuffer(Buffer* buffer, uint32_t offset, uint32_t val);
+		RESULT MarkBuffer(DebugBuffer* buffer, uint32_t val);
 		//RESULT SetRenderTargetView(CPU_HANDLE rtv);
 		RESULT End();
 	};

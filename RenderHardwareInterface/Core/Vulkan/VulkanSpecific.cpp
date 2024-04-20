@@ -19,6 +19,7 @@ namespace RHI
             case(Format::D16_UNORM): return VK_FORMAT_D16_UNORM;
             case(Format::D32_FLOAT_S8X24_UINT): return VK_FORMAT_D32_SFLOAT_S8_UINT;
             case(Format::R32G32_FLOAT): return VK_FORMAT_R32G32_SFLOAT;
+            case(Format::R16G16_FLOAT): return VK_FORMAT_R16G16_SFLOAT;
             case(Format::R32_FLOAT): return VK_FORMAT_R32_SFLOAT;
         default: return VK_FORMAT_UNDEFINED;
         }

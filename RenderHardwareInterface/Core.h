@@ -19,6 +19,6 @@ typedef unsigned int RESULT;
 
 
 
-#define DECL_STRUCT_CONSTRUCTORS(x) x(); x(Default_t); x(Zero_t);
+#define DECL_STRUCT_CONSTRUCTORS(x) x(){}; x(Default_t); x(Zero_t);
 #define DECL_CLASS_CONSTRUCTORS(x) x() = default;x(const x&) = default;x(x&&) = default;
 

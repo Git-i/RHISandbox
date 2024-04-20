@@ -4,7 +4,9 @@
 #include "VulkanSpecific.h"
 #include "volk.h"
 #define VMA_IMPLEMENTATION
+#define VULKAN_AFTER_CRASH_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 1
+#include "VulkanAfterCrash.h"
 #include "vk_mem_alloc.h"
 #include <iostream>
 #include <fstream>
@@ -26,6 +28,7 @@ static void SelectHeapIndices(RHI::vDevice* device)
     device->UploadHeapIndex = UploadHeap;
     device->ReadbackHeapIndex = ReadbackHeap;
 }
+
 extern "C"
 {
     RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device)
@@ -111,7 +114,7 @@ extern "C"
         info.enabledExtensionCount = ARRAYSIZE(ext_name);
         info.ppEnabledExtensionNames = ext_name;
         VkResult res = vkCreateDevice(vkPhysicalDevice, &info, nullptr, (VkDevice*)&vdevice->ID);
-
+        
        
         for (int i = 0; i < numCommandQueues; i++)
         {
@@ -129,6 +132,11 @@ extern "C"
         
         vmaCreateAllocator(&vmaInfo, &vdevice->allocator);
         RHI::vma_allocator = vdevice->allocator;
+        VkAfterCrash_DeviceCreateInfo acInfo;
+        acInfo.flags = 0;
+        acInfo.vkDevice = (VkDevice)vdevice->ID;
+        acInfo.vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
+        VkAfterCrash_CreateDevice(&acInfo, &vdevice->acDevice);
         *device = vdevice;
         return res;
     }
@@ -177,6 +185,10 @@ namespace RHI
         vertShaderStageInfo.pName = "main";
         return VK_SUCCESS;
     }
+    RESULT Device::QueueWaitIdle(CommandQueue* queue)
+    {
+        return vkQueueWaitIdle((VkQueue)queue->ID);
+    }
     static VkBufferUsageFlags VkBufferUsage(RHI::BufferUsage usage)
     {
         VkBufferUsageFlags flags = 0;
@@ -208,7 +220,7 @@ namespace RHI
     }
     RESULT Device::CreateCommandAllocators(CommandListType type,uint32_t count,CommandAllocator** pAllocator)
     {
-        vCommandAllocator* vallocator = new vCommandAllocator;
+        vCommandAllocator* vallocator = new vCommandAllocator[3];
         std::uint32_t index = 0;
         if (type == CommandListType::Direct) index = ((vDevice*)this)->indices.graphicsIndex;
         if (type == CommandListType::Compute) index = ((vDevice*)this)->indices.computeIndex;
@@ -221,11 +233,11 @@ namespace RHI
         VkResult res=VK_SUCCESS;
         for (uint32_t i = 0; i < count; i++)
         {
-            res = vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&vallocator->ID);
+            res = vkCreateCommandPool((VkDevice)ID, &info, nullptr, (VkCommandPool*)&vallocator[i].ID);
             if (res != VK_SUCCESS) break;
-            vallocator->device = this;
+            vallocator[i].device = this;
             Hold();
-            pAllocator[i] = vallocator;
+            pAllocator[i] = &vallocator[i];
         }
         return res;
     }
@@ -634,6 +646,20 @@ namespace RHI
             break;
         }
     }
+    VkCullModeFlags VkCullMode(CullMode mode)
+    {
+        switch (mode)
+        {
+        case RHI::CullMode::None: return VK_CULL_MODE_NONE;
+            break;
+        case RHI::CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
+            break;
+        case RHI::CullMode::Back: return VK_CULL_MODE_BACK_BIT;
+            break;
+        default: return VK_CULL_MODE_NONE;
+            break;
+        }
+    }
     RESULT Device::CreatePipelineStateObject(PipelineStateObjectDesc* desc, PipelineStateObject** pPSO)
     {
         vPipelineStateObject* vPSO = new vPipelineStateObject;
@@ -734,8 +760,8 @@ namespace RHI
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_NONE;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.cullMode = VkCullMode(desc->rasterizerMode.cullMode);
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
         rasterizer.depthBiasConstantFactor = 0.0f; // Optional
         rasterizer.depthBiasClamp = 0.0f; // Optional
@@ -794,10 +820,14 @@ namespace RHI
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
         VkPipelineRenderingCreateInfo pipelineRendereing{};
-        pipelineRendereing.colorAttachmentCount = 1;//todo
+        pipelineRendereing.colorAttachmentCount = desc->numRenderTargets;//todo
         pipelineRendereing.depthAttachmentFormat = FormatConv(desc->DSVFormat);
-        VkFormat format = FormatConv(desc->RTVFormats[0]);
-        pipelineRendereing.pColorAttachmentFormats = &format;
+        VkFormat format[10];
+        for (uint32_t i = 0; i < desc->numRenderTargets; i++)
+        {
+            format[i] = FormatConv(desc->RTVFormats[0]);
+        }
+        pipelineRendereing.pColorAttachmentFormats = format;
         pipelineRendereing.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -820,7 +850,8 @@ namespace RHI
         pipelineInfo.basePipelineIndex = -1; // Optional
         
 
-
+        vPSO->device = this;
+        Hold();
         vkCreateGraphicsPipelines((VkDevice)ID, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, (VkPipeline*)&vPSO->ID);
         *pPSO = vPSO;
         for(int i = 0; i < index; i++)
@@ -866,6 +897,15 @@ namespace RHI
                 Iinfo[i].sampler = nullptr;
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
                 writes[i].pImageInfo = &Iinfo[i];
+                break;
+            }
+            case(RHI::DescriptorType::CSBuffer):
+            {
+                Binfo[i].buffer = (VkBuffer)desc[i].bufferInfos->buffer->ID;
+                Binfo[i].offset = desc[i].bufferInfos->offset;
+                Binfo[i].range = desc[i].bufferInfos->range;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                writes[i].pBufferInfo = &Binfo[i];
                 break;
             }
             case(RHI::DescriptorType::ConstantBuffer):
@@ -1139,7 +1179,7 @@ namespace RHI
         info.flags = 0;
         info.magFilter = vkFilter(desc->magFilter);
         info.maxAnisotropy = desc->maxAnisotropy;
-        info.maxLod = desc->maxLOD;
+        info.maxLod = desc->maxLOD == FLT_MAX ? VK_LOD_CLAMP_NONE : desc->maxLOD;
         info.minFilter = vkFilter(desc->minFilter);
         info.minLod = desc->minLOD;
         info.mipLodBias = desc->mipLODBias;
@@ -1166,4 +1206,14 @@ namespace RHI
         Hold();
         return RESULT();
     }
+    RESULT Device::CreateDebugBuffer(DebugBuffer** buffer)
+    {
+        vDebugBuffer* buff = new vDebugBuffer;
+        VkAfterCrash_BufferCreateInfo info;
+        info.markerCount = 1;
+        VkAfterCrash_CreateBuffer(((vDevice*)this)->acDevice, &info, (VkAfterCrash_Buffer*)&buff->ID,&buff->data);
+        *buffer = buff;
+        return 0;
+    }
+
 }

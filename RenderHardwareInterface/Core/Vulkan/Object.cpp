@@ -11,7 +11,10 @@ namespace RHI {
 	int Object::Release()
 	{
 		*refCnt -= 1;
-		if (*refCnt <= 0) this->Destroy();
+		if (*refCnt <= 0) {
+			this->Destroy(); 
+			return 0;
+		}
 		return *refCnt;
 	}
 	int Object::GetRefCount()

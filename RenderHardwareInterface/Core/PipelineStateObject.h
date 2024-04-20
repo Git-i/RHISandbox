@@ -125,9 +125,9 @@ namespace RHI
 		bool DepthEnable;
 		RHI::DepthWriteMask DepthWriteMask;
 		RHI::ComparisonFunc DepthFunc;
-		BOOL StencilEnable;
-		UINT8 StencilReadMask;
-		UINT8 StencilWriteMask;
+		bool StencilEnable;
+		uint8_t StencilReadMask;
+		uint8_t StencilWriteMask;
 		RHI::DepthStencilOp FrontFace;
 		RHI::DepthStencilOp BackFace;
 	};

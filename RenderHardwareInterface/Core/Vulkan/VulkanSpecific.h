@@ -17,6 +17,8 @@
 #include "../TextureView.h"
 #include "vk_mem_alloc.h"
 #include "spirv_reflect.h"
+#include "../DebugBuffer.h"
+#include "VulkanAfterCrash.h"
 #include <algorithm>//for std::find
 namespace RHI
 {
@@ -54,6 +56,7 @@ namespace RHI
     public:
         std::vector<HeapProperties> HeapProps;
         VmaAllocator allocator;
+        VkAfterCrash_Device acDevice;
         std::uint32_t DefaultHeapIndex = UINT32_MAX;
         std::uint32_t UploadHeapIndex = UINT32_MAX;
         std::uint32_t ReadbackHeapIndex = UINT32_MAX;
@@ -80,6 +83,7 @@ namespace RHI
             ((vDevice*)device)->Release();
         }
     };
+    
     class vCommandAllocator : public CommandAllocator
     {
     public:
@@ -95,13 +99,6 @@ namespace RHI
         }
         std::vector<Internal_ID> m_pools;
     };
-    class vTextureView : public TextureView
-    {
-
-    };
-    class vCommandQueue : public CommandQueue
-    {
-    };
     class vGraphicsCommandList : public GraphicsCommandList
     {
     public:
@@ -116,6 +113,18 @@ namespace RHI
         }
         vCommandAllocator* allocator;
     };
+    class vTextureView : public TextureView
+    {
+    };
+    class vDebugBuffer : public DebugBuffer
+    {
+    public:
+        uint32_t* data;
+    };
+    class vCommandQueue : public CommandQueue
+    {
+    };
+    
     class vDynamicDescriptor : public DynamicDescriptor
     {
 
@@ -206,6 +215,7 @@ namespace RHI
     class vInstance : public Instance
     {
     public:
+        VkDebugUtilsMessengerEXT messanger;
         virtual void Destroy() override
         {
             delete Object::refCnt;

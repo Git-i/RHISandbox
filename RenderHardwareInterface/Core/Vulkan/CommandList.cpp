@@ -2,7 +2,6 @@
 #include "../CommandList.h"
 #include "volk.h"
 #include "VulkanSpecific.h"
-#include <stdarg.h>
 namespace RHI
 {
     static VkAttachmentLoadOp VulkanLoadOp(LoadOp op)
@@ -62,11 +61,11 @@ namespace RHI
         VkImageMemoryBarrier ImageBarr[100]{};
         for (uint32_t i = 0; i < numBufferBarriers; i++)
         {
-            BufferBarr[i].buffer = (VkBuffer)bufferBarrier[i].buffer;
+            BufferBarr[i].buffer = (VkBuffer)bufferBarrier[i].buffer->ID;
             BufferBarr[i].srcAccessMask = (VkAccessFlags)bufferBarrier[i].AccessFlagsBefore;
             BufferBarr[i].dstAccessMask = (VkAccessFlags)bufferBarrier[i].AccessFlagsAfter;
-            BufferBarr[i].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].previousQueue);
-            BufferBarr[i].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].nextQueue);
+            BufferBarr[i].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].previousQueue);
+            BufferBarr[i].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].nextQueue);
             BufferBarr[i].offset = bufferBarrier[i].offset;
             BufferBarr[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
             BufferBarr[i].size = bufferBarrier[i].size;
@@ -79,8 +78,8 @@ namespace RHI
             ImageBarr[i].oldLayout = (VkImageLayout)pImageBarriers[i].oldLayout;
             ImageBarr[i].srcAccessMask = (VkAccessFlags)pImageBarriers[i].AccessFlagsBefore;
             ImageBarr[i].dstAccessMask = (VkAccessFlags)pImageBarriers[i].AccessFlagsAfter;
-            ImageBarr[i].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].previousQueue);
-            ImageBarr[i].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].nextQueue);
+            ImageBarr[i].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].previousQueue);
+            ImageBarr[i].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].nextQueue);
             VkImageSubresourceRange range;
             range.aspectMask = (VkImageAspectFlags)pImageBarriers[i].subresourceRange.imageAspect;
             range.baseMipLevel = pImageBarriers[i].subresourceRange.IndexOrFirstMipLevel;
@@ -237,6 +236,32 @@ namespace RHI
         vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, VK_INDEX_TYPE_UINT32);
         return RESULT();
     }
+    RESULT GraphicsCommandList::BlitTexture(Texture* src, Texture* dst, UVector2D srcSize, UVector2D dstSize)
+    {
+        VkImageSubresourceLayers lyrs;
+        lyrs.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        lyrs.baseArrayLayer = 0;
+        lyrs.layerCount = 1;
+        lyrs.mipLevel = 0;
+        VkImageBlit blt;
+        blt.dstOffsets[0] = { 0,0,0 };
+        blt.dstOffsets[1] = { (int)dstSize.x, (int)dstSize.y,1 };
+        blt.srcOffsets[0] = { 0,0,0 };
+        blt.srcOffsets[1] = { (int)srcSize.x, (int)srcSize.y,1 };
+        blt.srcSubresource = blt.dstSubresource = lyrs;
+        vkCmdBlitImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_GENERAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_GENERAL, 1, &blt, VK_FILTER_LINEAR);
+        return 0;
+    }
+    RESULT GraphicsCommandList::MarkBuffer(Buffer* buffer, uint32_t offset, uint32_t val)
+    {
+        vkCmdFillBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, sizeof(uint32_t), val);
+        return RESULT();
+    }
+    RESULT GraphicsCommandList::MarkBuffer(DebugBuffer* buffer, uint32_t val)
+    {
+        VkAfterCrash_CmdWriteMarker((VkCommandBuffer)ID, (VkAfterCrash_Buffer)buffer->ID, 0, val);
+        return 0;
+    }
     RESULT GraphicsCommandList::DrawIndexed(uint32_t IndexCount, uint32_t InstanceCount, uint32_t startIndexLocation, uint32_t startVertexLocation, uint32_t startInstanceLocation)
     {
         vkCmdDrawIndexed((VkCommandBuffer)ID, IndexCount, InstanceCount, startIndexLocation, startVertexLocation, startInstanceLocation);
@@ -283,6 +308,7 @@ namespace RHI
         copy.dstSubresource.mipLevel = dstRange.IndexOrFirstMipLevel;
         vkCmdCopyImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
         return RESULT();
+        
     }
 
     RESULT GraphicsCommandList::SetComputePipeline(ComputePipeline* cp)
