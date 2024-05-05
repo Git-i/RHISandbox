@@ -18,9 +18,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	size_t ind = view.find(id_string);
 	ind += strlen(id_string);
 	std::cerr << std::endl << "validation layer" << pCallbackData->pMessage + ind << std::endl;
-	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT && pCallbackData->messageIdNumber != 101294395)
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT && pCallbackData->messageIdNumber != 101294395 && pCallbackData->messageIdNumber != 0x4dae5635)
 	{
-		//__debugbreak();
+		__debugbreak();
 	}
 
 	return VK_FALSE;
@@ -33,15 +33,34 @@ extern "C"
 		RHI::vInstance* vinstance = new RHI::vInstance;
 		*instance = vinstance;
 		volkInitialize();
+		VkValidationFeatureEnableEXT enabled[] =
+		{
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT
+		};
+		VkValidationFeaturesEXT features{};
+		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+		features.pEnabledValidationFeatures = enabled;
+		features.enabledValidationFeatureCount = 0;
+		VkApplicationInfo appInfo{};
+		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = "NULL";
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.pEngineName = "NULL";
+		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.apiVersion = VK_API_VERSION_1_3;
 		VkInstanceCreateInfo info = {};
-		const char* layerName = "VK_LAYER_KHRONOS_validation";
-		const char* extensionName[3] = { "VK_KHR_surface", "VK_KHR_win32_surface",VK_EXT_DEBUG_UTILS_EXTENSION_NAME, };
+		const char* layerNames[] = 
+		{
+			"VK_LAYER_KHRONOS_validation",
+		};
+		const char* extensionName[4] = { "VK_KHR_surface", "VK_KHR_win32_surface",VK_EXT_DEBUG_UTILS_EXTENSION_NAME,VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME};
 		info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		info.pNext = nullptr;
-		info.enabledLayerCount = 1;
-		info.ppEnabledLayerNames = &layerName;
+		info.pNext = &features;
+		info.enabledLayerCount = ARRAYSIZE(layerNames);
+		info.ppEnabledLayerNames = layerNames;
 		info.enabledExtensionCount = 3;
 		info.ppEnabledExtensionNames = extensionName;
+		info.pApplicationInfo = &appInfo;
 		VkResult res = vkCreateInstance(&info, nullptr, (VkInstance*)&vinstance->ID);
 		volkLoadInstance((VkInstance)vinstance->ID);
 		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
@@ -98,7 +117,7 @@ namespace RHI
 		createInfo.imageArrayLayers = 1;
 		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-		QueueFamilyIndices indices = findQueueFamilyIndices(pDevice, desc->OutputSurface);
+		auto [indices,_] = findQueueFamilyIndices(pDevice, desc->OutputSurface);
 		uint32_t queueFamilyIndices[] = { indices.graphicsIndex, indices.presentIndex };
 
 		if (indices.graphicsIndex != indices.presentIndex) {

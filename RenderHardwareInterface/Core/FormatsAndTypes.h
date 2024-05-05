@@ -3,6 +3,12 @@
 
 namespace RHI
 {
+	enum class ExportOptions
+	{
+		D3D11TextureNT,
+		Win32Handle,
+		FD
+	};
 	enum class Format
 	{
 		UNKNOWN = 0,
@@ -290,6 +296,7 @@ namespace RHI
 		MESH_SHADER_BIT_EXT = 0x00100000,
 		FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 	};
+	DEFINE_ENUM_FLAG_OPERATORS(PipelineStage);
 	enum  class ResourceAcessFlags
 	{
 		//RHI_ACCESS_INDIRECT_COMMAND_READ_BIT = 0x00000001,

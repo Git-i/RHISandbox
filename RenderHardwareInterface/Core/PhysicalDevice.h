@@ -2,15 +2,14 @@
 #include "Core.h"
 namespace RHI
 {
+	struct LUID
+	{
+		uint8_t data[8] = {};
+	};
 	struct PhysicalDeviceDesc
 	{
 		wchar_t  Description[128];
-		unsigned int   VendorId;
-		unsigned int   DeviceId;
-		unsigned int   SubSysId;
-		unsigned int   Revision;
 		SIZE_T DedicatedVideoMemory;
-		SIZE_T DedicatedSystemMemory;
 		SIZE_T SharedSystemMemory;
 		LUID   AdapterLuid;
 	};

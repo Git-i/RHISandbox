@@ -29,11 +29,11 @@ namespace RHI
 	}
 	RESULT SwapChain::Present(std::uint32_t imgIndex)
 	{
-		vkAcquireNextImageKHR((VkDevice)((vDevice*)device)->ID, (VkSwapchainKHR)ID, UINT64_MAX, ((vSwapChain*)this)->present_semaphore, VK_NULL_HANDLE, &imgIndex);
+		
 		VkPresentInfoKHR presentInfo{};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.waitSemaphoreCount = 0;
 		presentInfo.pWaitSemaphores = &((vSwapChain*)this)->present_semaphore;
 		VkSwapchainKHR swapChains[] = { (VkSwapchainKHR)ID };
 		presentInfo.swapchainCount = 1;
@@ -41,5 +41,15 @@ namespace RHI
 		presentInfo.pImageIndices = &imgIndex;
 		vkQueuePresentKHR(((vSwapChain*)this)->PresentQueue_ID, &presentInfo);
 		return RESULT();
+	}
+	RESULT SwapChain::AcquireImage(std::uint32_t imgIndex)
+	{
+		vkAcquireNextImageKHR((VkDevice)((vDevice*)device)->ID, (VkSwapchainKHR)ID, UINT64_MAX, ((vSwapChain*)this)->present_semaphore, VK_NULL_HANDLE, &imgIndex);
+		VkSubmitInfo info{};
+		info.pWaitSemaphores = &((vSwapChain*)this)->present_semaphore;
+		info.waitSemaphoreCount = 1;
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		vkQueueSubmit(((vSwapChain*)this)->PresentQueue_ID, 1, &info, 0);
+		return 0;
 	}
 }

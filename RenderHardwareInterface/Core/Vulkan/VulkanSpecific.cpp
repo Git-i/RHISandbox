@@ -42,28 +42,32 @@ namespace RHI
             break;
         }
     }
-    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface)
+    std::pair<QueueFamilyIndices,std::vector<uint32_t>> findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface)
     {
         QueueFamilyIndices indices = {};
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device->ID, &queueFamilyCount, nullptr);
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties((VkPhysicalDevice)device->ID, &queueFamilyCount, queueFamilies.data());
+        std::vector<uint32_t> count(queueFamilyCount);
         for (int i = 0; i < queueFamilyCount; i++)
         {
             if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
                 indices.graphicsIndex = i;
+                count[i] = queueFamilies[i].queueCount;
                 indices.flags |= HasGraphics;
             }
             if (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
             {
                 indices.computeIndex = i;
+                count[i] = queueFamilies[i].queueCount;
                 indices.flags |= HasCompute;
             }
             if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
             {
                 indices.copyIndex = i;
+                count[i] = queueFamilies[i].queueCount;
                 indices.flags |= HasCopy;
             }
             if (surface.ID)
@@ -77,6 +81,6 @@ namespace RHI
                 }
             }
         }
-        return indices;
+        return { indices,count };
     }
 }

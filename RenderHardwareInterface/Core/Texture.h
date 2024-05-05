@@ -11,7 +11,7 @@ namespace RHI
 		void Map(void** data);
 		void UnMap();
 	};
-
+	
 	enum class TextureType
 	{
 		Texture1D, Texture2D, Texture3D

@@ -30,7 +30,8 @@ namespace RHI
 		//CommandAllocator Passed must be the one used to create the command list.
 		RESULT CopyTextureRegion(SubResourceRange srcRange, SubResourceRange dstRange, Offset3D srcOffset, Offset3D dstOffset, Extent3D extent,Texture* src,Texture*dst);
 		RESULT Begin(CommandAllocator* allocator);
-		RESULT PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers);
+		RESULT PipelineBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers, std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers);
+		RESULT ReleaseBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers,std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers);
 		RESULT SetPipelineState(PipelineStateObject* pso);
 		RESULT SetComputePipeline(ComputePipeline* cp);
 		RESULT BindComputeDescriptorSet(RootSignature* rs, DescriptorSet* set, std::uint32_t setIndex);
@@ -51,7 +52,7 @@ namespace RHI
 		RESULT SetRootSignature(RootSignature* rs);
 		RESULT EndRendering();
 		//todo
-		RESULT BlitTexture(Texture* src, Texture* dst, UVector2D srcSize, UVector2D dstSize);
+		RESULT BlitTexture(Texture* src, Texture* dst, Extent3D srcSize, Offset3D srcOffset, Extent3D dstSize, Offset3D dstOffset);
 		RESULT MarkBuffer(Buffer* buffer, uint32_t offset, uint32_t val);
 		RESULT MarkBuffer(DebugBuffer* buffer, uint32_t val);
 		//RESULT SetRenderTargetView(CPU_HANDLE rtv);

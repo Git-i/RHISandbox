@@ -16,6 +16,18 @@
 #include "TextureView.h"
 namespace RHI
 {
+#ifdef WIN32
+	typedef HANDLE MemHandleT;
+#else
+	typedef int MemHandleT;
+#endif // WIN32
+
+	enum class DeviceCreateFlags
+	{
+		None = 0,
+		ShareAutomaticMemory = 1
+	};
+	DEFINE_ENUM_FLAG_OPERATORS(DeviceCreateFlags);
 	class RHI_API Device : public Object
 	{
 	protected:
@@ -44,13 +56,16 @@ namespace RHI
 		RESULT CreateDebugBuffer(DebugBuffer** buffer);
 		std::uint32_t GetDescriptorHeapIncrementSize(DescriptorType type);
 		RESULT GetSwapChainImage(SwapChain* swapchain, std::uint32_t index, Texture** texture);
+		RESULT GetMemorySharingCapabilites();
+		RESULT ExportTexture(Texture* texture, ExportOptions options, MemHandleT* handle);
 		//This is not staying
 		RESULT QueueWaitIdle(CommandQueue* queue);
 		~Device();
 	};
 	const RESULT& vkCompareFunc();
 }
+
 extern "C"
 {
-	RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device);
+	RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device,bool*MQ = nullptr, RHI::DeviceCreateFlags flags = RHI::DeviceCreateFlags::None);
 }

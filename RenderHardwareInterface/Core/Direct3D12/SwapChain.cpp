@@ -31,4 +31,8 @@ namespace RHI
 		((IDXGISwapChain*)ID)->Present(0, 0);
 		return RESULT();
 	}
+	RESULT SwapChain::AcquireImage(std::uint32_t imgIndex)
+	{
+		return RESULT();
+	}
 }

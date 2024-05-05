@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "../CommandQueue.h"
+#include "VulkanSpecific.h"
 #include "volk.h"
 namespace RHI
 {

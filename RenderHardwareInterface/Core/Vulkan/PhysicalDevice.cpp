@@ -6,13 +6,14 @@ namespace RHI
 {
     RESULT PhysicalDevice::GetDesc(PhysicalDeviceDesc* returnVal)
     {
-		VkPhysicalDeviceProperties result;
-		vkGetPhysicalDeviceProperties((VkPhysicalDevice)ID, &result);
-		returnVal->DeviceId = result.vendorID;
-		returnVal->VendorId = result.vendorID;
-		mbstowcs(returnVal->Description, result.deviceName, 128);
-		VkPhysicalDeviceMemoryProperties props;
-		vkGetPhysicalDeviceMemoryProperties((VkPhysicalDevice)ID, &props);
+		VkPhysicalDeviceIDProperties id_props{};
+		id_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+		VkPhysicalDeviceProperties2 result;
+		result.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		result.pNext = &id_props;
+		vkGetPhysicalDeviceProperties2((VkPhysicalDevice)ID, &result);
+		mbstowcs(returnVal->Description, result.properties.deviceName, 128);
+		memcpy(returnVal->AdapterLuid.data, id_props.deviceLUID, sizeof(uint8_t) * 8);
 		return 0;
     }
 }

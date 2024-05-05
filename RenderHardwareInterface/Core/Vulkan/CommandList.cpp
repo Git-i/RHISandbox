@@ -66,6 +66,8 @@ namespace RHI
             BufferBarr[i].dstAccessMask = (VkAccessFlags)bufferBarrier[i].AccessFlagsAfter;
             BufferBarr[i].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].previousQueue);
             BufferBarr[i].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, bufferBarrier[i].nextQueue);
+            if (BufferBarr[i].srcQueueFamilyIndex == BufferBarr[i].dstQueueFamilyIndex)
+                BufferBarr[i].srcQueueFamilyIndex = BufferBarr[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             BufferBarr[i].offset = bufferBarrier[i].offset;
             BufferBarr[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
             BufferBarr[i].size = bufferBarrier[i].size;
@@ -87,6 +89,8 @@ namespace RHI
             range.layerCount = pImageBarriers[i].subresourceRange.NumArraySlices;
             range.levelCount = pImageBarriers[i].subresourceRange.NumMipLevels;
             ImageBarr[i].subresourceRange = range;
+            if (ImageBarr[i].srcQueueFamilyIndex == ImageBarr[i].dstQueueFamilyIndex)
+                ImageBarr[i].srcQueueFamilyIndex = ImageBarr[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         }
         vkCmdPipelineBarrier((VkCommandBuffer)ID, (VkFlags)syncBefore, (VkFlags)syncAfter, 0, 0, nullptr, numBufferBarriers, BufferBarr, numImageBarriers, ImageBarr);
         return RESULT();
@@ -236,7 +240,7 @@ namespace RHI
         vkCmdBindIndexBuffer((VkCommandBuffer)ID, (VkBuffer)buffer->ID, offset, VK_INDEX_TYPE_UINT32);
         return RESULT();
     }
-    RESULT GraphicsCommandList::BlitTexture(Texture* src, Texture* dst, UVector2D srcSize, UVector2D dstSize)
+    RESULT GraphicsCommandList::BlitTexture(Texture* src, Texture* dst, Extent3D srcSize, Offset3D srcOffset, Extent3D dstSize, Offset3D dstOffset)
     {
         VkImageSubresourceLayers lyrs;
         lyrs.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -244,12 +248,13 @@ namespace RHI
         lyrs.layerCount = 1;
         lyrs.mipLevel = 0;
         VkImageBlit blt;
-        blt.dstOffsets[0] = { 0,0,0 };
-        blt.dstOffsets[1] = { (int)dstSize.x, (int)dstSize.y,1 };
-        blt.srcOffsets[0] = { 0,0,0 };
-        blt.srcOffsets[1] = { (int)srcSize.x, (int)srcSize.y,1 };
+        blt.dstOffsets[0] = { dstOffset.width, dstOffset.height, dstOffset.depth };
+        blt.dstOffsets[1] = { (int)(dstOffset.width + dstSize.width), (int)(dstOffset.height + dstSize.height),(int)(dstOffset.depth + dstSize.depth) };
+        blt.srcOffsets[0] = { srcOffset.width, srcOffset.height, srcOffset.depth};
+        blt.srcOffsets[1] = 
+        { (int)(srcOffset.width + srcSize.width), (int)(srcOffset.height + srcSize.height),(int)(srcOffset.depth + srcSize.depth)};
         blt.srcSubresource = blt.dstSubresource = lyrs;
-        vkCmdBlitImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_GENERAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_GENERAL, 1, &blt, VK_FILTER_LINEAR);
+        vkCmdBlitImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_GENERAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blt, VK_FILTER_LINEAR);
         return 0;
     }
     RESULT GraphicsCommandList::MarkBuffer(Buffer* buffer, uint32_t offset, uint32_t val)
@@ -309,6 +314,51 @@ namespace RHI
         vkCmdCopyImage((VkCommandBuffer)ID, (VkImage)src->ID, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, (VkImage)dst->ID, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
         return RESULT();
         
+    }
+
+    RESULT GraphicsCommandList::ReleaseBarrier(PipelineStage syncBefore, PipelineStage syncAfter, std::uint32_t numBufferBarriers, BufferMemoryBarrier* pbufferBarriers, std::uint32_t numImageBarriers, TextureMemoryBarrier* pImageBarriers)
+    {
+        VkBufferMemoryBarrier BufferBarr[10]{};
+        VkImageMemoryBarrier ImageBarr[100]{};
+        int bn = 0, tn = 0;
+        for (uint32_t i = 0; i < numBufferBarriers; i++)
+        {
+            if (QueueFamilyInd((vDevice*)device, pbufferBarriers[i].previousQueue) == QueueFamilyInd((vDevice*)device, pbufferBarriers[i].nextQueue))
+                continue;
+            BufferBarr[bn].buffer = (VkBuffer)pbufferBarriers[i].buffer->ID;
+            BufferBarr[bn].srcAccessMask = (VkAccessFlags)pbufferBarriers[i].AccessFlagsBefore;
+            BufferBarr[bn].dstAccessMask = (VkAccessFlags)pbufferBarriers[i].AccessFlagsAfter;
+            BufferBarr[bn].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pbufferBarriers[i].previousQueue);
+            BufferBarr[bn].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pbufferBarriers[i].nextQueue);
+            BufferBarr[bn].offset = pbufferBarriers[i].offset;
+            BufferBarr[bn].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            BufferBarr[bn].size = pbufferBarriers[i].size;
+            bn++;
+        }
+        for (uint32_t i = 0; i < numImageBarriers; i++)
+        {
+            if(QueueFamilyInd((vDevice*)device, pImageBarriers[i].previousQueue) == QueueFamilyInd((vDevice*)device, pImageBarriers[i].nextQueue))
+                continue;
+            ImageBarr[tn].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            ImageBarr[tn].image = (VkImage)pImageBarriers[i].texture->ID;
+            ImageBarr[tn].newLayout = (VkImageLayout)pImageBarriers[i].newLayout;
+            ImageBarr[tn].oldLayout = (VkImageLayout)pImageBarriers[i].oldLayout;
+            ImageBarr[tn].srcAccessMask = (VkAccessFlags)pImageBarriers[i].AccessFlagsBefore;
+            ImageBarr[tn].dstAccessMask = (VkAccessFlags)pImageBarriers[i].AccessFlagsAfter;
+            ImageBarr[tn].srcQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].previousQueue);
+            ImageBarr[tn].dstQueueFamilyIndex = QueueFamilyInd((vDevice*)device, pImageBarriers[i].nextQueue);
+            VkImageSubresourceRange range;
+            range.aspectMask = (VkImageAspectFlags)pImageBarriers[i].subresourceRange.imageAspect;
+            range.baseMipLevel = pImageBarriers[i].subresourceRange.IndexOrFirstMipLevel;
+            range.baseArrayLayer = pImageBarriers[i].subresourceRange.FirstArraySlice;
+            range.layerCount = pImageBarriers[i].subresourceRange.NumArraySlices;
+            range.levelCount = pImageBarriers[i].subresourceRange.NumMipLevels;
+            ImageBarr[tn].subresourceRange = range;
+            tn++;
+        }
+        if(bn+tn)
+            vkCmdPipelineBarrier((VkCommandBuffer)ID, (VkFlags)syncBefore, (VkFlags)syncAfter, 0, 0, nullptr, numBufferBarriers, BufferBarr, numImageBarriers, ImageBarr);
+        return RESULT();
     }
 
     RESULT GraphicsCommandList::SetComputePipeline(ComputePipeline* cp)

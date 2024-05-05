@@ -31,10 +31,10 @@ static void SelectHeapIndices(RHI::vDevice* device)
 
 extern "C"
 {
-    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc const* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device)
+    RESULT RHI_API RHICreateDevice(RHI::PhysicalDevice* PhysicalDevice, RHI::CommandQueueDesc* commandQueueInfos, int numCommandQueues, RHI::CommandQueue** commandQueues, Internal_ID instance, RHI::Device** device,bool* MQ, RHI::DeviceCreateFlags flags)
     {
         VkPhysicalDevice vkPhysicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
-
+        if(MQ)*MQ = true;
         VkPhysicalDeviceMemoryProperties memProps;
         RHI::vDevice* vdevice = new RHI::vDevice;
         RHI::vCommandQueue* vqueue = new RHI::vCommandQueue[numCommandQueues];
@@ -53,23 +53,34 @@ extern "C"
             vdevice->HeapProps.emplace_back(prop);
         }
         SelectHeapIndices(vdevice);
-        vdevice->indices = findQueueFamilyIndices(PhysicalDevice);
+        auto [qfamilies, qcounts] = findQueueFamilyIndices(PhysicalDevice);
+        vdevice->indices = qfamilies;
+        std::vector<uint32_t> usedQueues(qcounts.size(), 0);
 
-
-        std::vector<VkDeviceQueueCreateInfo> queueInfos(numCommandQueues);
+        std::vector<VkDeviceQueueCreateInfo> queueInfos;
+        queueInfos.reserve(numCommandQueues);
         for (int i = 0; i < numCommandQueues; i++)
         {
-            queueInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueInfos[i].pNext = NULL;
+            VkDeviceQueueCreateInfo qInfo;
+            qInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            qInfo.pNext = NULL;
             float queuePriority = commandQueueInfos[i].Priority;
-            queueInfos[i].pQueuePriorities = &queuePriority;
-            queueInfos[i].queueCount = 1;
+            qInfo.pQueuePriorities = &queuePriority;
             std::uint32_t index = 0;
             if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Direct) index = vdevice->indices.graphicsIndex;
             if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Compute) index = vdevice->indices.computeIndex;
             if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Copy) index = vdevice->indices.copyIndex;
-            queueInfos[i].queueFamilyIndex = index;
-            queueInfos[i].flags = 0;
+            if (qcounts[index] <= usedQueues[index])
+            {
+                commandQueueInfos[i]._unused = usedQueues[index] - 1;
+                if (MQ)*MQ = false;
+                continue;
+            }
+            commandQueueInfos[i]._unused = usedQueues[index]++;
+            qInfo.queueCount = 1;
+            qInfo.queueFamilyIndex = index;
+            qInfo.flags = 0;
+            queueInfos.push_back(qInfo);
         }
         if (vdevice->indices.graphicsIndex != vdevice->indices.presentIndex)
         {
@@ -83,7 +94,7 @@ extern "C"
             queueInfos.push_back(info);
         }
         VkPhysicalDeviceFeatures deviceFeatures{};
-        deviceFeatures.shaderStorageImageReadWithoutFormat = VK_TRUE;
+        //deviceFeatures.shaderStorageImageReadWithoutFormat = VK_TRUE;
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
         dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
         dynamicRenderingFeatures.dynamicRendering = VK_TRUE;
@@ -110,6 +121,10 @@ extern "C"
             VK_KHR_MAINTENANCE1_EXTENSION_NAME,
             VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
             VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
+            VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+            #ifdef WIN32
+            VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+            #endif
         };
         info.enabledExtensionCount = ARRAYSIZE(ext_name);
         info.ppEnabledExtensionNames = ext_name;
@@ -118,17 +133,29 @@ extern "C"
        
         for (int i = 0; i < numCommandQueues; i++)
         {
-            vkGetDeviceQueue((VkDevice)vdevice->ID, queueInfos[i].queueFamilyIndex, 0, (VkQueue*)&vqueue[i].ID);
+            uint32_t index = 0;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Direct) index = vdevice->indices.graphicsIndex;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Compute) index = vdevice->indices.computeIndex;
+            if (commandQueueInfos[i].CommandListType == RHI::CommandListType::Copy) index = vdevice->indices.copyIndex;
+            vkGetDeviceQueue((VkDevice)vdevice->ID, index, commandQueueInfos[i]._unused, (VkQueue*)&vqueue[i].ID);
             vqueue[i].device = vdevice;
             commandQueues[i] = &vqueue[i];
         }
         //initialize VMA
+        VkExternalMemoryHandleTypeFlagsKHR ext_mem[] = {
+            #ifdef WIN32
+            VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
+            VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR,
+            #endif // WIN32
+
+        };
         VmaAllocatorCreateInfo vmaInfo{};
         vmaInfo.device = (VkDevice)vdevice->ID;
         vmaInfo.flags = 0; //probably have error checking
         vmaInfo.instance = (VkInstance)instance;
         vmaInfo.physicalDevice = (VkPhysicalDevice)PhysicalDevice->ID;
         vmaInfo.pVulkanFunctions = nullptr;
+        vmaInfo.pTypeExternalMemoryHandleTypes = (flags & RHI::DeviceCreateFlags::ShareAutomaticMemory) != RHI::DeviceCreateFlags::None ? ext_mem:0;//
         
         vmaCreateAllocator(&vmaInfo, &vdevice->allocator);
         RHI::vma_allocator = vdevice->allocator;
@@ -184,6 +211,34 @@ namespace RHI
         vertShaderStageInfo.module = module[index];
         vertShaderStageInfo.pName = "main";
         return VK_SUCCESS;
+    }
+    VkExternalMemoryHandleTypeFlagBitsKHR MemFlags(ExportOptions opt)
+    {
+        switch (opt)
+        {
+        case RHI::ExportOptions::D3D11TextureNT:return VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT_KHR;
+            break;
+        case RHI::ExportOptions::Win32Handle:return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+            break;
+        case RHI::ExportOptions::FD:return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+            break;
+        default:return VkExternalMemoryHandleTypeFlagBitsKHR(0);
+            break;
+        }
+    }
+    RESULT Device::GetMemorySharingCapabilites()
+    {
+        return 0;
+    }
+    RESULT Device::ExportTexture(Texture* texture, ExportOptions options, MemHandleT* handle)
+    {
+        VkMemoryGetWin32HandleInfoKHR info;
+        vTexture* vtex = (vTexture*)texture;
+        info.memory = vtex->vma_ID ? vtex->vma_ID->GetMemory() : (VkDeviceMemory)vtex->heap;
+        info.pNext = 0;
+        info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
+        info.handleType = MemFlags(options);
+        return vkGetMemoryWin32HandleKHR((VkDevice)ID, &info, handle);
     }
     RESULT Device::QueueWaitIdle(CommandQueue* queue)
     {
@@ -310,7 +365,7 @@ namespace RHI
             poolInfo.pPoolSizes = poolSize;
             poolInfo.maxSets = desc->maxDescriptorSets;
 
-            vkCreateDescriptorPool((VkDevice)ID, &poolInfo, nullptr, (VkDescriptorPool*)&vdescriptorHeap->ID);
+            VkResult res = vkCreateDescriptorPool((VkDevice)ID, &poolInfo, nullptr, (VkDescriptorPool*)&vdescriptorHeap->ID);
         }
         *descriptorHeap = vdescriptorHeap;
         return 0;

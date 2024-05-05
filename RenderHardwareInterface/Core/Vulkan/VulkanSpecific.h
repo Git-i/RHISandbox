@@ -43,7 +43,7 @@ namespace RHI
         QueueFamilyIndicesFlags flags;
     };
 
-    QueueFamilyIndices findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface = RHI::Surface());
+    std::pair<QueueFamilyIndices, std::vector<uint32_t>> findQueueFamilyIndices(RHI::PhysicalDevice* device, RHI::Surface surface = RHI::Surface());
 
     class vDevice : public Device
     {
